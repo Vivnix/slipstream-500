@@ -1541,11 +1541,16 @@
   $('#btnHost').onclick = () => netHost();
   $('#btnJoin').onclick = netJoin;
   $('#btnLeave').onclick = () => { netLeave(); netStatus(''); };
+  // na publicznym adresie kopiujemy gotowy link (kod wpisze się sam), lokalnie — sam kod
+  const shareLink = /^https?:$/.test(location.protocol) && !/^(localhost|127\.|\[::1\])/.test(location.hostname);
+  const copyLabel = shareLink ? 'Kopiuj link' : 'Kopiuj kod';
+  $('#btnCopy').textContent = copyLabel;
   $('#btnCopy').onclick = () => {
-    const b = $('#btnCopy');
-    Promise.resolve(navigator.clipboard && navigator.clipboard.writeText(net.code)).then(() => { b.textContent = 'Skopiowano'; setTimeout(() => { b.textContent = 'Kopiuj kod'; }, 1500); }, () => {});
+    const b = $('#btnCopy'), text = shareLink ? `${location.origin}${location.pathname}?room=${net.code}` : net.code;
+    Promise.resolve(navigator.clipboard && navigator.clipboard.writeText(text)).then(() => { b.textContent = 'Skopiowano'; setTimeout(() => { b.textContent = copyLabel; }, 1500); }, () => {});
   };
-  { const q = new URLSearchParams(location.search).get('room'); if (q) $('#netCode').value = q.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5); }
+  { const q = new URLSearchParams(location.search).get('room');
+    if (q) { $('#netCode').value = q.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5); $('#online').scrollIntoView({ block: 'center' }); (cfg.name ? $('#btnJoin') : $('#netName')).focus(); } }
 
   // ════════════════════════ PĘTLA ════════════════════════
   let last = performance.now(), lastRaf = last;
