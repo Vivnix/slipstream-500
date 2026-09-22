@@ -49,6 +49,19 @@
     },
   };
 
+  const ROSTER = [
+    { name: 'K. Nowak', number: 7, color: '#d7263d', color2: '#f4f1de' },
+    { name: 'T. Walsh', number: 12, color: '#1f4e9c', color2: '#f4c20d' },
+    { name: 'R. Duarte', number: 19, color: '#1b998b', color2: '#0b1320' },
+    { name: 'M. Brenner', number: 21, color: '#f4c20d', color2: '#1d1d1d' },
+    { name: 'D. Okafor', number: 33, color: '#6a4c93', color2: '#ffffff' },
+    { name: 'S. Lindqvist', number: 44, color: '#ff7f11', color2: '#101820' },
+    { name: 'A. Moreau', number: 51, color: '#2e2e33', color2: '#ff3c38' },
+    { name: 'J. Kowalczyk', number: 66, color: '#e9ecef', color2: '#c1121f' },
+    { name: 'B. Hollis', number: 77, color: '#3a7d44', color2: '#f2e8cf' },
+    { name: 'L. Ferraz', number: 88, color: '#0096c7', color2: '#ffffff' },
+  ];
+
   // ───────────────────────────── TOR ─────────────────────────────
   class Track {
     constructor(def) {
@@ -223,24 +236,16 @@
 
     buildField() {
       const tr = this.track, o = this.opt;
-      const roster = [
-        { name: 'K. Nowak', number: 7, color: '#d7263d', color2: '#f4f1de' },
-        { name: 'T. Walsh', number: 12, color: '#1f4e9c', color2: '#f4c20d' },
-        { name: 'R. Duarte', number: 19, color: '#1b998b', color2: '#0b1320' },
-        { name: 'M. Brenner', number: 21, color: '#f4c20d', color2: '#1d1d1d' },
-        { name: 'D. Okafor', number: 33, color: '#6a4c93', color2: '#ffffff' },
-        { name: 'S. Lindqvist', number: 44, color: '#ff7f11', color2: '#101820' },
-        { name: 'A. Moreau', number: 51, color: '#2e2e33', color2: '#ff3c38' },
-        { name: 'J. Kowalczyk', number: 66, color: '#e9ecef', color2: '#c1121f' },
-        { name: 'B. Hollis', number: 77, color: '#3a7d44', color2: '#f2e8cf' },
-        { name: 'L. Ferraz', number: 88, color: '#0096c7', color2: '#ffffff' },
-      ];
-      const player = { name: 'TY', number: 10, color: '#f4c20d', color2: '#101012', isPlayer: true };
-      const field = o.attract ? roster.slice(0, 10) : roster.slice(0, 9);
-      shuffle(field);
-      if (!o.attract) field.splice(clamp(o.grid, 1, 10) - 1, 0, player);
+      let field;
+      if (o.field) field = o.field.map(c => Object.assign({}, c));     // gra online: skład i kolejność ustala gospodarz
+      else {
+        const player = { name: 'TY', number: 10, color: '#f4c20d', color2: '#101012', isPlayer: true };
+        field = shuffle(ROSTER.slice(0, o.attract ? 10 : 9));
+        if (!o.attract) field.splice(clamp(o.grid, 1, 10) - 1, 0, player);
+      }
+      // isPlayer = auto prowadzone przez człowieka (w sieci może ich być kilka); this.player = auto na tym komputerze
       this.cars = field.map((c, i) => new Car(Object.assign({ id: i, grid: i + 1, isPlayer: false }, c)));
-      this.player = this.cars.find(c => c.isPlayer) || null;
+      this.player = (o.localId != null ? this.cars.find(c => c.netId === o.localId) : this.cars.find(c => c.isPlayer)) || null;
       const rowGap = 12, dIn = -tr.halfW + 2.2, dOut = -tr.halfW + 5.8;
       this.cars.forEach((c, i) => {
         const row = Math.floor(i / 2), col = i % 2;
@@ -249,7 +254,7 @@
         c.x = p.x; c.y = p.y; c.psi = f.th; c.s = s; c.d = d;
         c.prog = tr.ds(0, s); c.gridLane = d;
         c.vx = Math.cos(f.th) * tr.pace; c.vy = Math.sin(f.th) * tr.pace;
-        const skill = c.isPlayer ? 10 : clamp(o.difficulty + (Math.random() - 0.5) * (o.attract ? 3 : 0.8), 1, 10);
+        const skill = c.skill != null ? c.skill : c.isPlayer ? 10 : clamp(o.difficulty + (Math.random() - 0.5) * (o.attract ? 3 : 0.8), 1, 10);
         c.driver = new Driver(c, this, skill);
       });
       this.order = this.cars.slice();
@@ -335,7 +340,7 @@
       const kAhead = this.track.curvature(car.s + V * 0.4, clamp(car.d, -this.track.halfW, this.track.halfW));
       const dmax = clamp(CAR.wb * kAhead + 0.011 + 32 / Math.max(1, V * V), 0.02, 0.42);
       let dl = c.steer * dmax, th = c.throttle;
-      if (this.opt.assists && V > 8) {
+      if ((car.assists != null ? car.assists : this.opt.assists) && V > 8) {
         const rExp = car.u * Math.tan(dl) / (CAR.wb * (1 + 0.0004 * car.u * car.u));
         const over = car.r - rExp;
         if (Math.abs(over) > 0.04) dl -= 0.35 * (over - Math.sign(over) * 0.04);
@@ -447,7 +452,7 @@
       const mode = this.opt.damage;
       const sev = vn - 2.2;
       c.hit = Math.max(c.hit, clamp(vn / 12, 0, 1));
-      if (mode === 'none' || sev <= 0 || c.status === 'finished') return;
+      if (mode === 'none' || sev <= 0 || c.status === 'finished' || this.opt.replica) return;
       const D = c.dmg;
       if (mode === 'simple') { D.health = Math.max(0.3, D.health - sev * 0.016); return; }
       const amt = sev * 0.034 * (wall ? 1.1 : 1);
@@ -561,6 +566,18 @@
       }
     }
 
+    // gra online, komputer gościa: lokalna predykcja własnego auta między paczkami od gospodarza.
+    // Uszkodzenia, okrążenia i status liczy tylko gospodarz (opt.replica wyłącza je w damage()).
+    predict(car, dt, collide) {
+      const tr = this.track;
+      this.playerCmd(car); this.actuate(car, dt); this.physics(car, dt);
+      car.hit = Math.max(0, car.hit - dt * 3); car.scrape = Math.max(0, car.scrape - dt * 4);
+      this.walls(car);
+      if (collide) for (const o of this.cars) if (o !== car && o.status !== 'out') this.carPair(car, o);
+      const L = tr.toLocal(car.x, car.y);
+      car.prog += tr.ds(car.s, L.s); car.s = L.s; car.d = L.d;
+    }
+
     resetCar(c) {
       const tr = this.track;
       const d = -tr.halfW - tr.apron * 0.5;
@@ -594,9 +611,14 @@
     lapsDown(c) { const lead = this.order[0]; return Math.floor((lead.prog - c.prog) / this.track.len); }
     get done() {
       if (this.opt.attract) return false;
-      const p = this.player;
       if (this.cars.every(c => c.status !== 'racing')) return true;
-      return !!(p && p.status !== 'racing' && this.finishedCount > 0 && this.t - Math.max(p.finishT ?? p.dnfT, this.firstFinishT ?? 0) > 9);
+      // koniec, gdy wszyscy ludzie są już po mecie (lub poza wyścigiem) i minęło kilka sekund
+      const hs = this.cars.filter(c => c.isPlayer);
+      if (this.finishedCount === 0) return false;
+      // online jeden zablokowany gracz nie może trzymać wszystkich: 90 s po zwycięzcy wyścig się kończy
+      if (this.opt.field && this.t - this.firstFinishT > 90) return true;
+      if (!hs.length || hs.some(c => c.status === 'racing')) return false;
+      return this.t - Math.max(this.firstFinishT ?? 0, ...hs.map(c => c.finishT ?? c.dnfT)) > 9;
     }
   }
   function rank(c) { return c.status === 'finished' ? 0 : (c.status === 'racing' ? 1 : 2); }
@@ -921,5 +943,5 @@
   }
   function angDiff(a, b) { let d = a - b; while (d > PI) d -= 2 * PI; while (d < -PI) d += 2 * PI; return d; }
 
-  return { TRACKS, Track, Race, Car, Driver, CAR, SUB, cornerSpeed, PEAK_SLIP, clamp, lerp, mod };
+  return { TRACKS, ROSTER, Track, Race, Car, Driver, CAR, SUB, cornerSpeed, PEAK_SLIP, clamp, lerp, mod, angDiff, shuffle };
 });
