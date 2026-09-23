@@ -193,6 +193,55 @@
   table.res td.r, table.res th.r { text-align: right; }
   .chip { display: inline-block; min-width: 30px; text-align: center; border-radius: 3px; padding: 3px 4px 2px; font-weight: 800; }
 
+  /* ───── PODIUM (ceremonia po mecie) ───── */
+  .podium { --gold: #e6b422; --silver: #c3c8d0; --bronze: #c07a3c; position: absolute; inset: 0; overflow: hidden; cursor: pointer; user-select: none;
+    background: linear-gradient(180deg, rgba(8,9,11,.62) 0%, rgba(8,9,11,0) 27%, rgba(8,9,11,0) 56%, rgba(8,9,11,.8) 100%); }
+  .pd-head { position: absolute; left: 0; right: 0; top: calc(16px + env(safe-area-inset-top, 0px)); display: flex; flex-direction: column; align-items: center; gap: 8px; padding-inline: 16px; text-align: center; pointer-events: none; }
+  .pd-kick { font: 800 17px/1 var(--display); letter-spacing: .14em; text-transform: uppercase; background: var(--caution); color: var(--caution-ink); padding: 5px 12px 4px; border-radius: 3px; transform: skewX(-8deg); }
+  .pd-title { margin: 0; font: 800 clamp(52px, 11vw, 112px)/.84 var(--display); letter-spacing: .07em; text-transform: uppercase; transform: skewX(-8deg); color: var(--flag-white);
+    text-shadow: 0 3px 0 #8a6d00, 0 10px 28px rgba(0,0,0,.55); animation: pdin .8s cubic-bezier(.2,1.35,.4,1) both; }
+  .pd-title span { color: var(--caution); }
+  .pd-head .checker { width: min(280px, 62vw); }
+  .pd-info { margin: 0; font: 600 15px/1.35 var(--body); letter-spacing: .04em; color: #dcd8ce; max-width: 62ch; text-shadow: 0 1px 3px rgba(0,0,0,.7); }
+  @keyframes pdin { from { opacity: 0; transform: skewX(-8deg) translateY(-18px) scale(1.25); } }
+  .pd-plates { position: absolute; left: 50%; bottom: calc(70px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(900px, calc(100% - 32px)); margin: 0; padding: 0; list-style: none;
+    display: grid; grid-template-columns: 1fr 1.15fr 1fr; align-items: end; gap: 12px; pointer-events: none; }
+  .pd-plate { grid-row: 1; min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 12px; align-items: center;
+    background: var(--panel); border-top: 4px solid var(--m); border-radius: 4px; padding: 10px 14px 9px; box-shadow: 0 10px 28px rgba(0,0,0,.45);
+    opacity: 0; transform: skewX(-8deg) translateY(28px); transition: opacity .35s ease-out, transform .55s cubic-bezier(.2,1.35,.4,1); }
+  .pd-plate.on { opacity: 1; transform: skewX(-8deg); }
+  .pd-plate.p1 { grid-column: 2; --m: var(--gold); padding-block: 14px 12px; }
+  .pd-plate.p2 { grid-column: 1; --m: var(--silver); }
+  .pd-plate.p3 { grid-column: 3; --m: var(--bronze); }
+  .pd-pos { grid-row: span 2; font: 800 44px/.85 var(--display); color: var(--m); }
+  .pd-plate.p1 .pd-pos { font-size: 62px; }
+  .pd-who { display: flex; align-items: center; gap: 8px; min-width: 0; font: 700 20px/1.15 var(--display); letter-spacing: .02em; }
+  .pd-who .chip { flex: none; }
+  .pd-who b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
+  .pd-plate.me .pd-who b { color: var(--caution); }
+  .pd-plate.hum .pd-who b { color: #9fd8ff; }
+  .pd-t { font: 600 16px/1.2 var(--display); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pd-plate.p1 .pd-t { color: var(--ink); font-size: 18px; }
+  .pd-foot { position: absolute; left: 16px; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .pd-hint { font: 500 13px/1 var(--body); color: rgba(236,233,225,.6); }
+  .pd-skip { margin-left: auto; transform: skewX(-8deg); }
+  .pd-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255,255,255,.08); }
+  .pd-bar i { display: block; height: 100%; background: var(--caution); transform-origin: left; transform: scaleX(0); }
+  .overlay.over-podium { background: rgba(8,9,11,.34); backdrop-filter: none; }
+  @media (pointer: coarse) { .pd-hint { display: none; } }
+  @media (max-width: 600px) {
+    .pd-plates { grid-template-columns: 1fr; gap: 6px; bottom: calc(62px + env(safe-area-inset-bottom, 0px)); }
+    .pd-plate.p1, .pd-plate.p2, .pd-plate.p3 { grid-column: 1; grid-row: auto; padding: 7px 12px 6px; }
+    .pd-pos, .pd-plate.p1 .pd-pos { font-size: 32px; }
+    .pd-who { font-size: 18px; } .pd-t, .pd-plate.p1 .pd-t { font-size: 15px; }
+    .pd-info { font-size: 13px; }
+  }
+  @media (max-height: 520px) {
+    .pd-title { font-size: 46px; } .pd-kick { font-size: 14px; } .pd-info { font-size: 13px; }
+    .pd-plates { bottom: calc(56px + env(safe-area-inset-bottom, 0px)); } .pd-plate { padding: 6px 12px 5px; }
+    .pd-pos, .pd-plate.p1 .pd-pos { font-size: 32px; }
+  }
+
   @media (max-width: 760px) {
     .menu { grid-template-columns: 1fr; }
     .menu-panel { background: rgba(10,11,14,.93); }
@@ -204,7 +253,8 @@
     .pos { font-size: 46px; }
     .dash { grid-template-columns: auto 130px; }
   }
-  @media (prefers-reduced-motion: reduce) { .feed div { animation: none; } .banner, .spot, .spot-msg { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { .feed div { animation: none; } .banner, .spot, .spot-msg { transition: none; }
+    .pd-title { animation: none; } .pd-plate { transform: skewX(-8deg); transition: opacity .25s; } }
 </style>
 
 <div id="app">
@@ -318,6 +368,18 @@
         <button class="btn" id="btnQuit">Menu</button>
       </div>
     </div>
+  </section>
+
+  <section id="podium" class="podium" hidden aria-label="Ceremonia na podium">
+    <div class="pd-head">
+      <div class="pd-kick" id="pdKick" hidden></div>
+      <h2 class="pd-title">Podi<span>um</span></h2>
+      <div class="checker" aria-hidden="true"></div>
+      <p class="pd-info" id="pdInfo"></p>
+    </div>
+    <ol class="pd-plates" id="pdPlates" aria-label="Pierwsza trójka"></ol>
+    <div class="pd-foot"><span class="pd-hint">Enter · Spacja · klik — przejdź do wyników</span><button class="btn primary pd-skip" id="btnPodSkip" type="button">Wyniki ▸</button></div>
+    <div class="pd-bar" aria-hidden="true"><i id="pdBar"></i></div>
   </section>
 
   <section id="results" class="overlay" hidden>
@@ -864,6 +926,7 @@
   const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), camUp = new THREE.Vector3(0, 1, 0);
 
   function newRace(opt) {
+    podiumEnd();
     for (const v of visuals) { scene.remove(v.root); v.root.traverse(o => { if (o.material && o.material.map && o.material.map !== T.smoke) o.material.map.dispose(); }); }
     const r = new Sim.Race(opt);
     if (!world || world.track.id !== r.track.id) buildWorld(r.track);
@@ -1201,6 +1264,263 @@
     $('#results').hidden = false; (net.mode === 'guest' ? $('#btnMenu') : $('#btnAgain')).focus();
   }
 
+  // ─── podium: ceremonia po mecie ───
+  // state 'podium' trwa ~9 s, potem wyniki wchodzą na wierzch, a scena podium dalej żyje pod nimi.
+  // Póki `pod` istnieje, auta z pierwszej trójki i kamerę ustawia podium (placeCars / updateCamera stoją).
+  // Sprzątanie: podiumEnd() — wołane z newRace(), więc każde wyjście z wyników (Jeszcze raz, Menu, Lobby, start od gospodarza) czyści scenę.
+  // Tor może przesunąć podium polem podiumD (odległość od osi toru na wysokości linii start/meta).
+  function podiumSpot(tr) { const f = tr.frame(0), d = tr.podiumD != null ? tr.podiumD : tr.innerWall - 22; const p = tr.toWorld(0, d); return { x: p.x, z: -p.y, heading: f.th }; }
+  const MEDAL = ['#e6b422', '#c3c8d0', '#c07a3c'];
+  const PSTEP = [{ x: 0, h: 1.8, yaw: 0.2 }, { x: -3.95, h: 1.25, yaw: 0.42 }, { x: 3.95, h: 0.85, yaw: -0.42 }];   // P1 środek, P2 lewy, P3 prawy (patrząc od toru)
+  const PSW = 3.9, PSD = 6.4, PBASE = 0.18, PFALL = 0.6;
+  const CONF_COL = ['#f4c20d', '#f7f7f2', '#e5484d', '#1f78ff', '#2fbf71', '#ff7f11', '#b18cff'];
+  const FW_COL = [[1, 0.7, 0.1], [1, 0.12, 0.08], [0.2, 0.45, 1], [0.15, 1, 0.35], [1, 0.25, 0.85], [0.9, 0.9, 0.8]];
+  const _pv = new THREE.Vector3(), _pq = new THREE.Quaternion(), _pe = new THREE.Euler(), _pm = new THREE.Matrix4(), _p1 = new THREE.Vector3(1, 1, 1), _py = new THREE.Vector3(0, 1, 0);
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  let pod = null, podKey = null;
+
+  // pula cząsteczek Points w układzie podium (fajerwerki: addytywne, kolorowe; szampan: biały)
+  function podPool(n, mat, colors) {
+    const pos = new Float32Array(n * 3), vel = new Float32Array(n * 3), life = new Float32Array(n), max = new Float32Array(n), base = colors ? new Float32Array(n * 3) : null;
+    for (let i = 0; i < n; i++) pos[i * 3 + 1] = -999;
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const col = colors ? new Float32Array(n * 3) : null; if (col) geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const pts = new THREE.Points(geo, mat); pts.frustumCulled = false;
+    let k = 0;
+    return { pts,
+      emit(x, y, z, vx, vy, vz, l, c) {
+        const i = k = (k + 1) % n; pos[i * 3] = x; pos[i * 3 + 1] = y; pos[i * 3 + 2] = z; vel[i * 3] = vx; vel[i * 3 + 1] = vy; vel[i * 3 + 2] = vz; life[i] = max[i] = l;
+        if (base && c) { base[i * 3] = c[0]; base[i * 3 + 1] = c[1]; base[i * 3 + 2] = c[2]; }
+      },
+      update(dt, grav, drag) {
+        const kd = Math.exp(-dt * drag);
+        for (let i = 0; i < n; i++) {
+          if (life[i] <= 0) continue;
+          life[i] -= dt;
+          if (life[i] <= 0) { pos[i * 3 + 1] = -999; continue; }
+          vel[i * 3 + 1] -= grav * dt; vel[i * 3] *= kd; vel[i * 3 + 1] *= kd; vel[i * 3 + 2] *= kd;
+          pos[i * 3] += vel[i * 3] * dt; pos[i * 3 + 1] += vel[i * 3 + 1] * dt; pos[i * 3 + 2] += vel[i * 3 + 2] * dt;
+          if (col) { const f = life[i] / max[i], a = f * f * (f < 0.35 ? 0.55 + Math.random() * 0.45 : 1); col[i * 3] = base[i * 3] * a; col[i * 3 + 1] = base[i * 3 + 1] * a; col[i * 3 + 2] = base[i * 3 + 2] * a; }
+        }
+        geo.attributes.position.needsUpdate = true; if (col) geo.attributes.color.needsUpdate = true;
+      } };
+  }
+
+  function buildPodium(G, trackName) {
+    const texs = [];
+    const std = (color, o) => new THREE.MeshStandardMaterial(Object.assign({ color, roughness: 0.6, metalness: 0.1 }, o));
+    const mesh = (geo, mat, x, y, z, cast = true) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = cast; m.receiveShadow = true; G.add(m); return m; };
+    const dark = std(0x15171c), deck = std(0x2a2d34, { roughness: 0.85 });
+    mesh(new THREE.BoxGeometry(14.5, PBASE, 9.5), deck, 0, PBASE / 2, 0.4);                                   // platforma
+    mesh(new THREE.BoxGeometry(14.5, 0.03, 0.28), std(0xf4c20d, { roughness: 0.5 }), 0, PBASE + 0.01, 5.0, false);   // żółta krawędź
+    const cg = new THREE.PlaneGeometry(14.5, 1.2), uv = cg.attributes.uv;                                   // pas szachownicy przed podium
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 14.5 / 2.4, uv.getY(i) * 0.5);
+    mesh(cg, new THREE.MeshStandardMaterial({ map: T.checker, roughness: 0.8 }), 0, 0.012, 5.8, false).rotation.x = -Math.PI / 2;
+    PSTEP.forEach((st, i) => {
+      const medal = std(MEDAL[i], { metalness: 0.45, roughness: 0.32 });
+      mesh(new THREE.BoxGeometry(PSW, st.h, PSD), dark, st.x, PBASE + st.h / 2, 0);
+      mesh(new THREE.BoxGeometry(PSW + 0.12, 0.08, PSD + 0.12), medal, st.x, PBASE + st.h + 0.04, 0);
+      for (const sx of [-1, 1]) mesh(new THREE.BoxGeometry(0.1, st.h, 0.06), medal, st.x + sx * (PSW / 2 - 0.05), PBASE + st.h / 2, PSD / 2 + 0.02, false);
+      const nt = tex(256, 256, (g, w, h) => {
+        g.clearRect(0, 0, w, h); g.font = '800 236px "Saira Condensed", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.save(); g.translate(w / 2, h / 2 + 14); g.transform(1, 0, -0.16, 1, 0, 0);
+        g.lineWidth = 14; g.strokeStyle = '#0b0c0f'; g.strokeText(String(i + 1), 0, 0); g.fillStyle = MEDAL[i]; g.fillText(String(i + 1), 0, 0); g.restore();
+      }); texs.push(nt);
+      const s = Math.min(st.h * 0.92, 1.5);
+      mesh(new THREE.PlaneGeometry(s, s), new THREE.MeshStandardMaterial({ map: nt, transparent: true, roughness: 0.4, metalness: 0.3 }), st.x, PBASE + st.h * 0.5, PSD / 2 + 0.012, false);
+    });
+    // ściana sponsorska za podium
+    const bt = tex(1024, 400, (g, w, h) => {
+      const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#191c23'); gr.addColorStop(1, '#0b0c0f'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+      const sq = 16;
+      for (let r = 0; r < 2; r++) for (let x = 0; x < w / sq; x++) { g.fillStyle = (x + r) % 2 ? '#121212' : '#f3f3ef'; g.fillRect(x * sq, r * sq, sq, sq); g.fillRect(x * sq, h - (2 - r) * sq, sq, sq); }
+      g.fillStyle = '#f4c20d';
+      for (const side of [0, 1]) for (let k = 0; k < 5; k++) { const x0 = side ? w - 40 - k * 30 : 40 + k * 30, sk = side ? -40 : 40; g.beginPath(); g.moveTo(x0, 50); g.lineTo(x0 + 14, 50); g.lineTo(x0 + 14 + sk, 350); g.lineTo(x0 + sk, 350); g.closePath(); g.fill(); }
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.save(); g.translate(w / 2, 138); g.transform(1, 0, -0.18, 1, 0, 0); g.font = '800 150px "Saira Condensed", sans-serif';
+      const a = g.measureText('SLIPSTREAM ').width, b = g.measureText('500').width, x0 = -(a + b) / 2;
+      g.textAlign = 'left'; g.fillStyle = '#f4f1e8'; g.fillText('SLIPSTREAM ', x0, 0); g.fillStyle = '#f4c20d'; g.fillText('500', x0 + a, 0); g.restore();
+      g.fillStyle = '#f4c20d'; g.fillRect(w * 0.26, 226, w * 0.48, 5);
+      g.font = '700 44px "Saira Condensed", sans-serif'; g.fillStyle = '#ece9e1'; g.fillText(String(trackName).toUpperCase(), w / 2, 268);
+      g.font = '600 30px "Saira Condensed", sans-serif'; g.fillStyle = '#8f939c'; g.fillText(sponsor.slice(0, 6).join('   ·   '), w / 2, 326);
+    }); texs.push(bt);
+    const face = new THREE.MeshStandardMaterial({ map: bt, emissive: 0xffffff, emissiveMap: bt, emissiveIntensity: 0.28, roughness: 0.55 });
+    mesh(new THREE.BoxGeometry(18, 7.2, 0.3), [dark, dark, dark, dark, face, dark], 0, 3.6, -4.3);
+    for (const x of [-8.6, 8.6]) mesh(new THREE.BoxGeometry(0.3, 7.6, 0.5), std(0x5b616b, { metalness: 0.4 }), x, 3.8, -4.3);
+    return texs;
+  }
+  // wysokość podłoża pod konfetti (układ podium)
+  function podFloor(x, z) {
+    for (const st of PSTEP) if (Math.abs(x - st.x) < PSW / 2 + 0.06 && Math.abs(z) < PSD / 2 + 0.06) return PBASE + st.h + 0.08;
+    if (Math.abs(x) < 7.25 && z > -4.35 && z < 5.15) return PBASE;
+    return 0;
+  }
+
+  function startPodium() {
+    podiumEnd();
+    state = 'podium'; paused = false; $('#pause').hidden = true; $('#hud').hidden = true;
+    const rm = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+    const tr = race.track, fin = race.order.filter(c => c.status === 'finished');
+    const top = (fin.length ? fin : race.order).slice(0, 3), win = top[0];
+    // podium frontem do toru (tor leży w d = 0 na tej samej normalnej)
+    const sp = podiumSpot(tr), p0 = tr.toWorld(0, 0), dx = p0.x - sp.x, dz = -p0.y - sp.z;
+    const G = new THREE.Group(); G.position.set(sp.x, 0, sp.z); G.rotation.y = dx * dx + dz * dz > 1 ? Math.atan2(dx, dz) : sp.heading;
+    scene.add(G); G.updateMatrixWorld();
+    const texs = buildPodium(G, Sim.TRACKS[race.opt.track].name);
+    // konfetti: InstancedMesh z obrotem każdego listka
+    const NC = rm ? 140 : 420, cf = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.1, 0.16), new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }), NC);
+    cf.instanceMatrix.setUsage(THREE.DynamicDrawUsage); cf.frustumCulled = false;
+    const col = new THREE.Color(), conf = [];
+    _pm.makeScale(0, 0, 0);
+    for (let i = 0; i < NC; i++) { cf.setColorAt(i, col.set(CONF_COL[i % CONF_COL.length]).convertSRGBToLinear()); cf.setMatrixAt(i, _pm); conf.push({ p: new THREE.Vector3(), v: new THREE.Vector3(), r: new THREE.Euler(), w: new THREE.Vector3(), ph: Math.random() * 7, on: false, rest: false }); }
+    G.add(cf);
+    const fw = podPool(rm ? 300 : 1000, new THREE.PointsMaterial({ size: 1.25, map: T.smoke, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }), true);
+    const spray = podPool(rm ? 90 : 320, new THREE.PointsMaterial({ color: 0xf6f3ea, size: 0.16, map: T.smoke, transparent: true, opacity: 0.9, depthWrite: false }), false);
+    G.add(fw.pts); G.add(spray.pts);
+    // auta: P3, P2, P1 spadają po kolei; pozostałe znikają
+    for (const v of visuals) v.root.visible = false;
+    const cars = top.map((c, i) => ({ c, v: visFor(c), i, st: PSTEP[i], t0: 0, landed: false }));
+    let t = 0.9;
+    for (let i = cars.length - 1; i >= 0; i--) { if (i === 0 && cars.length > 1) t += 0.5; cars[i].t0 = t; t += 1.3; }
+    const p1land = cars.length ? cars[0].t0 + PFALL : 1;
+    pod = { G, texs, cars, conf, cf, ci: 0, fw, spray, rockets: [], rm, T: 0, p1land, end: p1land + 5, nextFw: 0.5, shake: 0,
+      center: new THREE.Vector3(sp.x, 0, sp.z) };
+    // nakładka HTML
+    const me = race.player, myI = top.indexOf(me);
+    const res = c => c.status === 'finished' ? (c === win ? fmtT(c.finishT - race.greenT) : win.status === 'finished' ? `+${(c.finishT - win.finishT).toFixed(3)} s` : 'meta')
+      : c.status === 'racing' ? (race.lapsDown(c) >= 1 ? `+${race.lapsDown(c)} okr.` : 'w trasie') : 'DNF';
+    $('#pdPlates').innerHTML = top.map((c, i) => `<li class="pd-plate p${i + 1}${c === me ? ' me' : c.isPlayer ? ' hum' : ''}" data-i="${i}"><span class="pd-pos">${i + 1}</span>`
+      + `<span class="pd-who"><span class="chip" style="background:${c.color};color:${textColor(c.color)}">${c.number}</span><b>${c === me ? 'Ty' : esc(c.name)}</b></span><span class="pd-t">${res(c)}</span></li>`).join('');
+    const kick = $('#pdKick'); kick.hidden = myI < 0 || !fin.length; kick.textContent = myI === 0 ? 'Zwycięstwo!' : `Stajesz na podium — P${myI + 1}`;
+    $('#pdInfo').textContent = `${Sim.TRACKS[race.opt.track].name} · ${race.laps} okr. · ${fin.length ? `wygrywa ${who(win)}` : 'nikt nie dojechał do mety'}`;
+    $('#pdBar').style.transform = 'scaleX(0)';
+    $('#results').hidden = true; $('#podium').hidden = false;
+    $('#btnPodSkip').focus({ preventScroll: true });
+    camera.fov = 50; camera.updateProjectionMatrix();
+    if (audio.cheer) audio.cheer(1);
+  }
+  function podiumToResults() {
+    if (!pod || state !== 'podium') return;
+    if (pod.T < pod.p1land) pod.T = pod.p1land - 0.001;       // pominięcie: wszystkie auta od razu lądują na stopniach
+    $('#podium').hidden = true;
+    showResults();
+    $('#results').classList.add('over-podium');
+  }
+  function podiumEnd() {
+    podKey = null;
+    $('#podium').hidden = true; $('#results').classList.remove('over-podium');
+    if (!pod) return;
+    const P = pod; pod = null;
+    scene.remove(P.G);
+    P.G.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach(m => m.dispose()); });
+    for (const t of P.texs) t.dispose();
+    for (const o of P.cars) if (o.v) { o.v.body.rotation.set(0, 0, 0); for (const w of o.v.wheels) w.piv.rotation.y = 0; }
+    for (const v of visuals) v.root.visible = true;       // placeCars ustawi widoczność wg statusu w następnej klatce
+    camera.up.set(0, 1, 0); snapCam = true; tvFocusT = 0;
+  }
+  function podiumBurst(n) {
+    const P = pod;
+    for (let k = 0; k < n; k++) {
+      const q = P.conf[P.ci = (P.ci + 1) % P.conf.length], m = k % 3;
+      q.on = true; q.rest = false; q.r.set(rnd(0, 6), rnd(0, 6), rnd(0, 6)); q.w.set(rnd(-9, 9), rnd(-9, 9), rnd(-9, 9));
+      if (m < 2) { const sx = m ? 1 : -1; q.p.set(sx * 6.9, 0.4, 3.4); q.v.set(-sx * rnd(1, 4.5), rnd(9, 14), rnd(-2.5, 1.5)); }   // armatki po bokach
+      else { q.p.set(rnd(-6, 6), rnd(8, 12), rnd(-3, 3.5)); q.v.set(rnd(-1, 1), rnd(0, 1.5), rnd(-1, 1)); }                       // deszcz z góry
+    }
+  }
+  function podiumRocket() {
+    const P = pod;
+    P.rockets.push({ p: new THREE.Vector3(rnd(-14, 14), 0.5, rnd(-18, -9)), v: new THREE.Vector3(rnd(-2.5, 2.5), rnd(15, 19), rnd(-1.5, 2)), fuse: rnd(0.8, 1.05), c: FW_COL[(Math.random() * FW_COL.length) | 0] });
+  }
+  function podiumUpdate(dt) {
+    const P = pod; P.T += dt;
+    const T = P.T, rm = P.rm, G = P.G;
+    if (state === 'podium') { $('#pdBar').style.transform = `scaleX(${clamp(T / P.end, 0, 1)})`; if (T >= P.end) podiumToResults(); }
+    // auta na stopniach
+    for (const o of P.cars) {
+      const u = T - o.t0, v = o.v;
+      if (u < 0) { if (v) v.root.visible = false; continue; }
+      if (!o.landed && u >= PFALL) {
+        o.landed = true;
+        const pl = document.querySelector(`#pdPlates [data-i="${o.i}"]`); if (pl) pl.classList.add('on');
+        if (v) for (const sx of [-1, 1]) { _pv.set(o.st.x + sx * 1.6, PBASE + o.st.h + 0.3, 0); G.localToWorld(_pv); puff(_pv, new THREE.Vector3(sx * 1.5, 0.4, 0), 0xd8d4ca, 2, 1.1, 0.4); }
+        if (o.i === 0) {
+          podiumBurst(rm ? 120 : 300); if (!rm) P.shake = 0.35;
+          for (let k = 0; k < (rm ? 1 : 3); k++) podiumRocket();
+          if (audio.horn) audio.horn();
+        }
+      }
+      if (!v) continue;
+      v.root.visible = true;
+      let y = PBASE + o.st.h + 0.08, spin = 0, pitch = 0;
+      if (u < PFALL) { const k = u / PFALL; y += 9 * (1 - k * k); spin = 0.9 * (1 - k) * (1 - k); }
+      else { const b = u - PFALL; y += 0.3 * Math.abs(Math.sin(b * 9)) * Math.exp(-b * 5); pitch = 0.05 * Math.sin(b * 14) * Math.exp(-b * 4); }
+      _pv.set(o.st.x, y, 0.15); G.localToWorld(_pv); v.root.position.copy(_pv);
+      v.root.quaternion.setFromAxisAngle(_py, G.rotation.y + o.st.yaw - Math.PI / 2 + spin);
+      v.body.rotation.set(0, 0, pitch);
+      for (const w of v.wheels) w.piv.rotation.y = w.front ? (o.i === 0 ? 0.28 : 0) : 0;
+    }
+    // konfetti: lot z oporem, trzepotanie, lądowanie płasko na stopniach i trawie
+    let dirty = false;
+    for (let i = 0; i < P.conf.length; i++) {
+      const q = P.conf[i]; if (!q.on || q.rest) continue;
+      q.v.y -= 9.8 * dt; q.v.multiplyScalar(Math.exp(-dt * (q.v.y < 0 ? 6 : 1.1)));
+      q.p.addScaledVector(q.v, dt); q.p.x += Math.sin(T * 3.1 + q.ph) * 0.8 * dt; q.p.z += Math.cos(T * 2.3 + q.ph * 1.7) * 0.8 * dt;
+      q.r.x += q.w.x * dt; q.r.y += q.w.y * dt; q.r.z += q.w.z * dt;
+      const fl = podFloor(q.p.x, q.p.z);
+      if (q.p.y <= fl + 0.005) { q.p.y = fl + 0.005; q.rest = true; q.r.set(-Math.PI / 2, 0, q.ph); }
+      P.cf.setMatrixAt(i, _pm.compose(q.p, _pq.setFromEuler(q.r), _p1)); dirty = true;
+    }
+    if (dirty) P.cf.instanceMatrix.needsUpdate = true;
+    if (!rm && T > P.p1land + 2.4 && T - dt <= P.p1land + 2.4) podiumBurst(140);   // druga fala z góry
+    // fajerwerki
+    if (T >= P.nextFw) { podiumRocket(); P.nextFw = T + (T < P.p1land - 0.8 ? rnd(1.1, 1.5) : T < P.end ? (rm ? 1.6 : rnd(0.5, 0.95)) : rnd(1.8, 3.2)); }
+    for (let i = P.rockets.length - 1; i >= 0; i--) {
+      const r = P.rockets[i];
+      r.v.y -= 6 * dt; r.p.addScaledVector(r.v, dt); r.fuse -= dt;
+      P.fw.emit(r.p.x, r.p.y, r.p.z, rnd(-0.3, 0.3), rnd(-1.5, -0.5), rnd(-0.3, 0.3), 0.25, [0.55, 0.3, 0.1]);
+      if (r.fuse > 0) continue;
+      P.rockets.splice(i, 1);
+      const n = rm ? 30 : 85;
+      for (let k = 0; k < n; k++) {
+        _pv.set(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)); if (_pv.lengthSq() < 0.01) _pv.set(0, 1, 0);
+        _pv.normalize().multiplyScalar(rnd(7, 10.5));
+        const c = k % 7 ? r.c : [1, 1, 0.9];
+        P.fw.emit(r.p.x, r.p.y, r.p.z, _pv.x + r.v.x * 0.3, _pv.y + r.v.y * 0.3, _pv.z + r.v.z * 0.3, rnd(1.3, 2.1), c);
+      }
+    }
+    P.fw.update(dt, 3.2, 1.5);
+    // szampan z auta zwycięzcy
+    const w0 = P.cars[0];
+    if (w0 && w0.v && T > P.p1land + 0.8 && T < P.p1land + 4.8) {
+      const rate = rm ? 25 : 80, n = Math.floor(T * rate) - Math.floor((T - dt) * rate);
+      const top = PBASE + w0.st.h + 0.08 + 1.4;
+      for (let k = 0; k < n; k++) { const a = Math.sin(T * 2.2) * 0.9; P.spray.emit(w0.st.x + rnd(-0.2, 0.2), top, 0.3, a * 2 + rnd(-0.6, 0.6), rnd(4.5, 6.5), rnd(1.8, 3.8), rnd(0.9, 1.3)); }
+    }
+    P.spray.update(dt, 9.8, 0.4);
+    // kamera: szeroki przelot po łuku przed podium, potem najazd na zwycięzcę i powolne krążenie
+    const e = clamp(T / P.end, 0, 1), ee = e * e * (3 - 2 * e), after = Math.max(0, T - P.end);
+    const th = -0.95 + 1.15 * ee + 0.45 * Math.sin(after * 0.09);
+    const fovR = camera.fov * Math.PI / 360, fit = 6.8 / (Math.tan(fovR) * camera.aspect);   // na wąskim ekranie odsuń kamerę, żeby cała trójka się zmieściła
+    let rad = lerp(30, 12, ee) + 1.2 * Math.sin(after * 0.13); rad = Math.max(rad, lerp(0, fit, ee));
+    const hgt = lerp(10, 3.4, ee) + 0.4 * Math.sin(after * 0.11) + (rad > 14 ? (rad - 14) * 0.18 * ee : 0);
+    _pv.set(Math.sin(th) * rad, Math.max(1.4, hgt), Math.cos(th) * rad);
+    if (!rm) { _pv.x += Math.sin(T * 0.7) * 0.12; _pv.y += Math.sin(T * 0.93 + 1) * 0.08; }
+    if (P.shake > 0) { P.shake = Math.max(0, P.shake - dt); const s = P.shake * 0.5; _pv.x += rnd(-s, s); _pv.y += rnd(-s, s); }
+    G.localToWorld(_pv); camera.position.copy(_pv);
+    const portrait = clamp((1.1 - camera.aspect) / 0.6, 0, 1);
+    _pv.set(0, lerp(3.4, 2.7, ee) - portrait * 1.2 * ee, lerp(-1, 0.3, ee)); G.localToWorld(_pv);
+    camera.up.set(0, 1, 0); camera.lookAt(_pv);
+    if (Math.abs(camera.fov - 50) > 0.05) { camera.fov = 50; camera.updateProjectionMatrix(); }
+  }
+  $('#podium').addEventListener('click', () => podiumToResults());
+  // pominięcie klawiszem; ten sam klawisz nie może od razu „kliknąć” przycisku w wynikach (Spacja działa na keyup, Enter powtarza)
+  window.addEventListener('keydown', e => {
+    if (podKey && e.key === podKey) { e.preventDefault(); e.stopImmediatePropagation(); return; }
+    if (state === 'podium' && !e.repeat && ['Enter', ' ', 'Spacebar', 'Escape', 'Esc'].includes(e.key)) { e.preventDefault(); e.stopImmediatePropagation(); podKey = e.key; podiumToResults(); }
+  }, true);
+  window.addEventListener('keyup', e => { if (podKey && e.key === podKey) { podKey = null; e.preventDefault(); } }, true);
+  window.addEventListener('blur', () => { podKey = null; });
+
   // ════════════════════════ GRA ONLINE ════════════════════════
   // Gospodarz liczy całą symulację (fizyka, AI, uszkodzenia, okrążenia) i ~25×/s rozsyła stan aut.
   // Gość wysyła tylko sterowanie. Własne auto przewiduje lokalnie (skręt działa od razu), a po każdej
@@ -1416,7 +1736,7 @@
       case 'lobby': net.players = m.players || []; net.settings = m.settings; net.racing = !!m.racing; renderNet(); retrack(); break;
       case 'start': if (net.myId && m.opt.field.some(c => c.netId === net.myId)) startRace(m.opt); break;
       case 's': if (online() && state !== 'menu') guestSnap(m); break;
-      case 'done': if (online() && state === 'race') showResults(); break;
+      case 'done': if (online() && state === 'race') startPodium(); break;
       case 'menu': if (online()) startAttract(); break;
       case 'pong': { const r = nowS() - m.c; net.rtt = net.rtt0 ? net.rtt * 0.8 + r * 0.2 : r; net.rtt0 = true; break; }
     }
@@ -1588,21 +1908,22 @@
         handleEvents();
         if (!guest && race.done) {
           if (host) { hostSnap(true); netBroadcast({ t: 'done' }); }
-          showResults();
+          startPodium();
         }
-      } else if (state === 'results' && guest) {
+      } else if ((state === 'results' || state === 'podium') && guest) {
         guestStep(dt);
         race.events.length = 0;
-      } else if (state === 'menu' || state === 'results') {
+      } else if (state === 'menu' || state === 'results' || state === 'podium') {
         race.update(dt);
-        if (host && state === 'results') hostAfterUpdate(dt);
+        if (host && state !== 'menu') hostAfterUpdate(dt);
         race.events.length = 0;
       }
       viewOffset(1);
-      placeCars(dt);
+      // podium przejmuje auta z pierwszej trójki i kamerę, dopóki gracz nie opuści wyników
+      if (pod) podiumUpdate(dt); else placeCars(dt);
       updateFx(dt);
-      updateCamera(dt);
-      const tgt = focus ? new THREE.Vector3(focus.x, 0, -focus.y) : new THREE.Vector3();
+      if (!pod) updateCamera(dt);
+      const tgt = pod ? pod.center.clone() : focus ? new THREE.Vector3(focus.x, 0, -focus.y) : new THREE.Vector3();
       sun.position.copy(tgt).addScaledVector(sunDir, 200); sun.target.position.copy(tgt); sun.target.updateMatrixWorld();
       sky.position.copy(camera.position);
       if (state === 'race') { updateHud(dt); audio.update(race.player && race.player.status !== 'out' ? race.player : null, paused ? null : race); }
@@ -1612,7 +1933,8 @@
   }
 
   window.__s500 = { get race() { return race; }, camera, scene, setCam(m) { camMode = m; snapCam = true; },
-    run(sec, keysDown) { Object.assign(keys, keysDown || {}); for (let t = 0; t < sec; t += 1 / 60) step(1 / 60); renderer.render(scene, camera); }, get visuals() { return visuals; } };
+    run(sec, keysDown) { Object.assign(keys, keysDown || {}); for (let t = 0; t < sec; t += 1 / 60) step(1 / 60); renderer.render(scene, camera); }, get visuals() { return visuals; },
+    get podium() { return pod; }, skipPodium() { podiumToResults(); } };
   const boot = () => { startAttract(); requestAnimationFrame(frame); };
   // tekstury z numerami potrzebują załadowanej czcionki
   const fontsReady = document.fonts && document.fonts.load ? Promise.all([document.fonts.load('800 100px "Saira Condensed"'), document.fonts.load('600 16px "Barlow"')]).catch(() => {}) : Promise.resolve();
