@@ -352,6 +352,7 @@
         <div class="group"><div class="label">Sterowanie</div><div class="seg" id="optSteer"></div></div>
         <div class="group"><div class="label">Asysty</div><div class="seg" id="optAssist"></div></div>
         <div class="group"><div class="label">Jednostki</div><div class="seg" id="optUnits"></div></div>
+        <div class="group"><div class="label">Grafika</div><div class="seg" id="optGfx" title="Auto: rozdzielczość sama dopasowuje się do płynności"></div></div>
       </div>
 
       <div class="group snd" id="sndMenu"></div>
@@ -388,7 +389,7 @@
         <kbd>S / ↓</kbd><span>hamulec</span>
         <kbd>A D / ← →</kbd><span>skręt (krótkie stuknięcia — na owalu kierownica prawie stoi w miejscu)</span>
         <kbd>B</kbd><span>zjazd do boksu na najbliższym okrążeniu (opony, naprawa) — w alei prowadzi autopilot z limiterem</span>
-        <kbd>C</kbd><span>kamera · <kbd>Q</kbd> patrz do tyłu (trzymaj) · <kbd>R</kbd> powrót na tor po obrocie · <kbd>P</kbd> pauza · <kbd>M</kbd> sterowanie myszą · <kbd>N</kbd> dźwięk</span>
+        <kbd>C</kbd><span>kamera · <kbd>Q</kbd> patrz do tyłu (trzymaj) · <kbd>R</kbd> powrót na tor po obrocie · <kbd>P</kbd> pauza · <kbd>M</kbd> sterowanie myszą · <kbd>N</kbd> dźwięk · <kbd>F</kbd> licznik FPS</span>
         <kbd>Pad</kbd><span>lewa gałka skręt, RT gaz, LT hamulec, Y kamera, X boks, LB widok do tyłu</span>
       </div>
     </div>
@@ -401,6 +402,7 @@
       <div class="lapline"><em>OKR</em><span id="hLap">1</span><span style="color:var(--muted)">/<span id="hLaps">8</span></span></div>
       <div class="times">Ostatnie <b id="hLast">—</b><br>Najlepsze <b id="hBest">—</b></div>
       <div class="times" id="hNet" hidden></div>
+      <div class="times" id="hFps" hidden></div>
     </div>
     <ol id="tower" class="tower"></ol>
     <div id="spotL" class="spot left"></div>
@@ -419,7 +421,7 @@
       <div class="pedals"><div class="bar"><i id="hThr"></i></div><div class="bar"><i id="hBrk"></i></div></div>
     </div>
     <div id="dmg" class="dmg"></div>
-    <div class="hint" id="hint">B boks · C kamera · Q do tyłu · R powrót na tor · P pauza · M mysz · N dźwięk</div>
+    <div class="hint" id="hint">B boks · C kamera · Q do tyłu · R powrót na tor · P pauza · M mysz · N dźwięk · F licznik FPS</div>
     <div class="touch" id="touch">
       <button data-k="left" style="left:16px">◀</button>
       <button data-k="right" style="left:112px">▶</button>
@@ -524,13 +526,14 @@
     return { number: Number.isInteger(n) && n >= 0 && n <= 99 ? n : d.number, color: HEX.test(c.color) ? c.color.toLowerCase() : d.color,
       color2: HEX.test(c.color2) ? c.color2.toLowerCase() : d.color2, model: CAR_MODELS.some(m => m.id === c.model) ? c.model : d.model };
   }
-  const defaults = { track: 'speedway', len: 1, difficulty: 5, damage: 'simple', tires: 'normal', grid: 8, steering: 'keyboard', assists: true, units: 'kmh', name: '', netAi: 'fill',
+  const defaults = { track: 'speedway', len: 1, difficulty: 5, damage: 'simple', tires: 'normal', grid: 8, steering: 'keyboard', assists: true, units: 'kmh', gfx: 'auto', showFps: false, name: '', netAi: 'fill',
     car: { number: 10, color: '#f4c20d', color2: '#101012', model: 'sedan' } };
   const cfg = Object.assign({}, defaults, store.get('cfg', {}));
   cfg.car = cleanCar(cfg.car);
   if (!Sim.TRACKS[cfg.track]) cfg.track = 'speedway';
   if (!DAMAGE[cfg.damage]) cfg.damage = 'simple';
   if (!TIRES[cfg.tires]) cfg.tires = 'normal';
+  if (!['auto', 'high', 'low'].includes(cfg.gfx)) cfg.gfx = 'auto';
   cfg.difficulty = clamp(Math.round(+cfg.difficulty) || 5, 1, 11); cfg.len = clamp(+cfg.len || 0, 0, 2);
   // stan gry online (funkcje w sekcji GRA ONLINE); mode: null | 'host' | 'guest'
   const net = { mode: null, peer: null, code: null, myId: null, players: [], guests: new Map(), host: null, settings: null, racing: false, rtt: 0.08 };
@@ -568,6 +571,7 @@
     seg($('#optSteer'), [['keyboard', 'Klawiatura'], ['mouse', 'Mysz']], () => cfg.steering, v => { cfg.steering = v; });
     seg($('#optAssist'), [[true, 'Włączone'], [false, 'Wyłączone']], () => cfg.assists, v => { cfg.assists = v; });
     seg($('#optUnits'), [['kmh', 'km/h'], ['mph', 'mph']], () => cfg.units, v => { cfg.units = v; });
+    seg($('#optGfx'), [['auto', 'Auto'], ['high', 'Wysoka'], ['low', 'Niska']], () => cfg.gfx, v => { cfg.gfx = v; applyGfx(); });
     $('#optDiff').value = cfg.difficulty;
     $('#diffVal').textContent = +cfg.difficulty === 11 ? '11 · AI +1% mocy' : `${cfg.difficulty} / 11`;
     $('#diffTxt').textContent = DIFF[cfg.difficulty - 1];
@@ -618,7 +622,6 @@
 
   // ════════════════════════ THREE.JS: SCENA ════════════════════════
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputEncoding = THREE.sRGBEncoding;
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
@@ -626,11 +629,53 @@
   $('#app').prepend(renderer.domElement);
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(62, 1, 0.2, 6000);
-  const MAXANI = renderer.capabilities.getMaxAnisotropy();
+  const MAXANI = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+
+  // ─── jakość grafiki ───
+  // Auto: rozdzielczość renderowania (pixel ratio) sama dopasowuje się do tempa klatek — przy spadku poniżej ~52 kl./s maleje
+  // o 15%, a po kilku sekundach z zapasem wraca w górę. Jeśli zmniejszenie nic nie dało (limit odświeżania, oszczędzanie baterii,
+  // wąskim gardłem jest procesor), cofa je i długo nie próbuje ponownie — nie ma sensu psuć obrazu za darmo.
+  // Wysoka: pełna rozdzielczość ekranu (do 2×) i miękkie cienie. Niska: najwyżej 1×, mniejsza mapa cieni, uproszczona publiczność bliżej kamery.
+  const PR_MIN = 0.6;
+  const gfx = { pr: 0, lodK: 1, fps: 0, frames: 0, fpsT: 0, win: [], evalT: 0, good: 0, upWait: 3, lastUp: -1e9, drop: null, hold: 0, holdLen: 20000 };
+  const prMax = () => Math.min(window.devicePixelRatio || 1, cfg.gfx === 'low' ? 1 : 2);
+  function setPr(pr) {
+    pr = Math.round(clamp(pr, PR_MIN, prMax()) * 20) / 20;
+    if (pr === gfx.pr) return;
+    gfx.pr = pr; renderer.setPixelRatio(pr);
+    gfx.win.length = 0; gfx.evalT = 0;
+  }
+  function gfxTick(ms) {
+    gfx.frames++; gfx.fpsT += ms;
+    if (gfx.fpsT >= 500) { gfx.fps = gfx.frames * 1000 / gfx.fpsT; gfx.frames = 0; gfx.fpsT = 0; }
+    if (cfg.gfx !== 'auto' || document.hidden || ms > 250) return;
+    gfx.win.push(ms); gfx.evalT += ms;
+    if (gfx.evalT < 1000 || gfx.win.length < 15) return;
+    // średnia bez 10% najdłuższych klatek — pojedyncze przycięcia (GC, kompilacja shadera) nie ruszają rozdzielczości
+    const w = gfx.win.sort((a, b) => a - b).slice(0, Math.ceil(gfx.win.length * 0.9)), avg = w.reduce((a, b) => a + b, 0) / w.length;
+    const now = performance.now();
+    gfx.win.length = 0; gfx.evalT = 0;
+    if (avg > 1000 / 52) {
+      gfx.good = 0;
+      if (gfx.drop && avg > gfx.drop.ms * 0.95) {   // mniejsza rozdzielczość nic nie dała — to nie karta graficzna
+        setPr(gfx.drop.pr); gfx.drop = null; gfx.hold = now + gfx.holdLen; gfx.holdLen = Math.min(240000, gfx.holdLen * 2); return;
+      }
+      if (now < gfx.hold || gfx.pr <= PR_MIN) return;
+      if (now - gfx.lastUp < 4000) gfx.upWait = Math.min(60, gfx.upWait * 2);   // ostatnie podniesienie było za duże
+      gfx.drop = { pr: gfx.pr, ms: avg };
+      setPr(gfx.pr * 0.85); store.set('pr', gfx.pr);
+    } else {
+      gfx.drop = null;
+      if (avg < 1000 / 58 && gfx.pr < prMax() && ++gfx.good >= gfx.upWait) { gfx.good = 0; gfx.lastUp = now; setPr(gfx.pr * 1.1); store.set('pr', gfx.pr); }
+    }
+  }
   function resize() {
     const w = window.innerWidth, h = window.innerHeight;
+    if (gfx.pr > prMax() || (cfg.gfx !== 'auto' && gfx.pr !== prMax())) setPr(prMax());   // np. okno przeniesione na inny monitor
     renderer.setSize(w, h, false); camera.aspect = w / Math.max(1, h); camera.updateProjectionMatrix();
+    gfx.win.length = 0; gfx.evalT = 0;
   }
+  setPr(cfg.gfx === 'auto' ? +store.get('pr', prMax()) || prMax() : prMax());
   window.addEventListener('resize', resize); resize();
 
   // Zachód słońca nad torem: nisko wiszące słońce, długie cienie.
@@ -658,6 +703,19 @@
   Object.assign(sun.shadow.camera, { left: -60, right: 60, top: 60, bottom: -60, near: 1, far: 400 });
   sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
   scene.add(sun); scene.add(sun.target);
+  function applyGfx() {
+    // miękkie cienie (PCFSoft) kosztują na każdym pikselu toru — w trybie Auto zwykłe PCF, ledwie widać różnicę na krawędziach
+    const low = cfg.gfx === 'low', type = cfg.gfx === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap, size = low ? 1024 : 2048;
+    if (renderer.shadowMap.type !== type || sun.shadow.mapSize.x !== size) {
+      renderer.shadowMap.type = type; sun.shadow.mapSize.set(size, size);
+      if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+      scene.traverse(o => { const m = o.material; if (m) for (const x of [].concat(m)) x.needsUpdate = true; });
+    }
+    gfx.lodK = low ? 1.8 : 1;
+    gfx.drop = null; gfx.hold = 0; gfx.upWait = 3;
+    setPr(cfg.gfx === 'auto' ? gfx.pr : prMax());
+  }
+  applyGfx();
 
   // ─── tekstury rysowane na canvasie ───
   function tex(w, h, draw, rep) {
@@ -906,7 +964,8 @@
       seats.push({ x: a.x, y: (k + 1) * RH, z: -a.y, yaw: Math.atan2(b.y - a.y, b.x - a.x), s: s1 });
     }
     const crowd = buildCrowd(seats); G.add(crowd.group);
-    if (!road) G.add(buildCampers(tr));
+    const lod = crowd.lod.slice();
+    if (!road) { const rv = buildCampers(tr); G.add(rv); lod.push(...rv.userData.lod); }
     // kamery telewizyjne dookoła toru: na drogowym po zewnętrznej stronie najbliższego łuku
     const tv = [], nTv = road ? Math.round(tr.len / 280) : 10;
     for (let i = 0; i < nTv; i++) {
@@ -916,7 +975,7 @@
       const p = W3(tr, s, side * off, 0);
       tv.push({ s, pos: new THREE.Vector3(p[0], tr.height(s, side * hw) + (road ? 12 : 16), p[2]) });
     }
-    world = { group: G, tv, track: tr, boxes, crowd };
+    world = { group: G, tv, track: tr, boxes, crowd, lod };
   }
 
   // ─── publiczność jak w „Autach”: widzowie to samochodziki z oczami na przedniej szybie ───
@@ -942,17 +1001,22 @@
   });
   // postać-pojazd: bryła z profilu bocznego + części (kolor wierzchołków mnożony przez kolor egzemplarza: karoseria bierze kolor
   // egzemplarza, koła i szyby zostają ciemne), osobno szyba z oczami i uśmiech na zderzaku z atlasu T.eyes
-  function critterGeo(profile, depth, parts, gl, mo) {
+  // lo: uproszczona bryła do rysowania z daleka — profil z prostymi zamiast łuków, bez kół i drobnych części (tylko loParts)
+  function critterGeo(profile, depth, parts, gl, mo, loParts = []) {
     const sh = new THREE.Shape(); profile(sh);
-    const shell = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: false, curveSegments: 3 }); shell.translate(0, 0, -depth / 2);
-    const pos = [], nor = [], col = [];
-    for (const [g0, c] of [[shell, [1, 1, 1]]].concat(parts)) {
-      const g = g0.index ? g0.toNonIndexed() : g0, p = g.attributes.position.array, n = g.attributes.normal.array;
-      for (let i = 0; i < p.length; i++) { pos.push(p[i]); nor.push(n[i]); }
-      for (let i = 0; i < p.length / 3; i++) col.push(c[0], c[1], c[2]);
-    }
-    const body = new THREE.BufferGeometry();
-    body.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); body.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); body.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    const shellOf = seg => new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: false, curveSegments: seg }).translate(0, 0, -depth / 2);
+    const colored = list => {
+      const pos = [], nor = [], col = [];
+      for (const [g0, c] of list) {
+        const g = g0.index ? g0.toNonIndexed() : g0, p = g.attributes.position.array, n = g.attributes.normal.array;
+        for (let i = 0; i < p.length; i++) { pos.push(p[i]); nor.push(n[i]); }
+        for (let i = 0; i < p.length / 3; i++) col.push(c[0], c[1], c[2]);
+      }
+      const b = new THREE.BufferGeometry();
+      b.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); b.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); b.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+      return b;
+    };
+    const body = colored([[shellOf(3), [1, 1, 1]]].concat(parts)), lo = colored([[shellOf(1), [1, 1, 1]]].concat(loParts));
     // szyba: płaszczyzna na pochyłości od dolnej krawędzi (gl[0], gl[1]) do górnej (gl[2], gl[3])
     const [x0, y0, x1, y1, gw, gh] = gl, glass = new THREE.PlaneGeometry(gw, gh), up = new THREE.Vector3(x1 - x0, y1 - y0, 0).normalize(), out = new THREE.Vector3(up.y, -up.x, 0);
     glass.applyMatrix4(new THREE.Matrix4().makeBasis(new THREE.Vector3(0, 0, -1), up, out));
@@ -966,7 +1030,7 @@
     }
     const eyes = new THREE.BufferGeometry();
     eyes.setAttribute('position', new THREE.Float32BufferAttribute(ep, 3)); eyes.setAttribute('uv', new THREE.Float32BufferAttribute(eu, 2));
-    return { body, eyes };
+    return { body, eyes, lo };
   }
   const box = (w, h, d, x, y, z) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
   const crowdGeo = critterGeo(sh => {
@@ -984,12 +1048,13 @@
       [box(0.9, 1.9, 0.06, 1.7, 1.45, 1.21), [0.8, 0.8, 0.8]],                     // drzwi
     ];
     for (const x of [-2.6, -0.8, 0.9]) parts.push([box(1.2, 0.55, 2.46, x, 2.45, 0), dark]);   // okna
+    const loParts = [parts[0]].concat(parts.slice(4));   // z daleka: pas i okna
     for (const x of [2.55, -2.3]) for (const z of [-1.08, 1.08]) parts.push([wheel.clone().translate(x, 0.48, z), [0.05, 0.05, 0.05]]);
     return critterGeo(sh => {
       sh.moveTo(-3.9, 0.45); sh.lineTo(3.55, 0.45); sh.lineTo(3.85, 0.58); sh.lineTo(3.9, 1.25); sh.lineTo(3.3, 1.45); sh.lineTo(2.85, 2.25);
       sh.lineTo(3.25, 2.35); sh.quadraticCurveTo(3.48, 2.45, 3.42, 2.8); sh.quadraticCurveTo(3.32, 3.12, 2.8, 3.16); sh.lineTo(-3.7, 3.2);
       sh.quadraticCurveTo(-3.95, 3.16, -3.95, 2.9); sh.lineTo(-3.95, 0.6); sh.closePath();
-    }, 2.4, parts, [3.3, 1.45, 2.85, 2.25, 2.1, 0.86], [3.99, 0.98, 1.5, 0.5]);
+    }, 2.4, parts, [3.3, 1.45, 2.85, 2.25, 2.1, 0.86], [3.99, 0.98, 1.5, 0.5], loParts);
   })();
   const crowdU = { uTime: { value: 0 }, uHype: { value: 0 }, uWave: { value: 0 }, uFocus: { value: new THREE.Vector3(0, -1e4, 0) } };
   function crowdShader(sh) {
@@ -1019,27 +1084,60 @@
   const CROWD_COL = ['#d7263d', '#f4c20d', '#1f4e9c', '#f1f1f1', '#ff7f11', '#3a7d44', '#6a4c93', '#0096c7', '#e76f9a', '#8ecae6', '#9acd32', '#2e2e33', '#c8a165', '#40c9a2'];
   let crowdHype = 0;
   const crowdKick = v => { crowdHype = Math.max(crowdHype, v); };
+  // Tysiące widzów i kamperów dzielimy na porcje według miejsca. r128 odcina obiekty spoza kadru tylko po sferze geometrii,
+  // więc każda porcja dostaje własny widok wspólnych buforów bazowej bryły ze sferą obejmującą jej egzemplarze.
+  // Daleko (w pikselach, więc z uwzględnieniem zoomu kamery TV) porcja rysuje się uproszczoną bryłą bez oczu.
+  function geoView(base, aCrowd, sphere) {
+    const g = new THREE.BufferGeometry();
+    for (const k in base.attributes) g.setAttribute(k, base.attributes[k]);
+    if (base.index) g.setIndex(base.index);
+    g.setAttribute('aCrowd', aCrowd); g.boundingSphere = sphere;
+    return g;
+  }
+  // items: { m: Matrix4, c: Color, d: [faza, pozycja wzdłuż trybuny, energia] }; cell(item) — klucz porcji
+  function lodInstances(items, cell, geo, lodD) {
+    const cells = new Map(), G = new THREE.Group(), chunks = [];
+    for (const it of items) { const k = cell(it); if (!cells.has(k)) cells.set(k, []); cells.get(k).push(it); }
+    for (const list of cells.values()) {
+      const n = list.length, data = new Float32Array(n * 3), aCrowd = new THREE.InstancedBufferAttribute(data, 3);
+      const sphere = new THREE.Sphere().setFromPoints(list.map(it => new THREE.Vector3().setFromMatrixPosition(it.m)));
+      sphere.radius += geo.pad;   // bryła, podskoki i fala
+      const body = new THREE.InstancedMesh(geoView(geo.body, aCrowd, sphere), crowdMat.body, n);
+      const eyes = new THREE.InstancedMesh(geoView(geo.eyes, aCrowd, sphere), crowdMat.eyes, n);
+      const lo = new THREE.InstancedMesh(geoView(geo.lo, aCrowd, sphere), crowdMat.body, n);
+      list.forEach((it, i) => { body.setMatrixAt(i, it.m); body.setColorAt(i, it.c); data.set(it.d, i * 3); });
+      eyes.instanceMatrix = lo.instanceMatrix = body.instanceMatrix; lo.instanceColor = body.instanceColor;
+      body.frustumCulled = eyes.frustumCulled = lo.frustumCulled = true;   // r128 domyślnie wyłącza to w InstancedMesh
+      lo.visible = false; G.add(body, eyes, lo);
+      chunks.push({ sphere, body, eyes, lo, lodD });
+    }
+    G.userData.lod = chunks;
+    return G;
+  }
+  const _lodV = new THREE.Vector3();
+  function updateLod() {
+    if (!world) return;
+    const k = Math.tan(camera.fov * Math.PI / 360) / Math.tan(31 * Math.PI / 180) * gfx.lodK, cp = camera.position;
+    for (const ch of world.lod) {
+      const far = (_lodV.copy(ch.sphere.center).distanceTo(cp) - ch.sphere.radius) * k > ch.lodD;
+      ch.body.visible = ch.eyes.visible = !far; ch.lo.visible = far;
+    }
+  }
   function buildCrowd(seats) {
-    const n = seats.length, group = new THREE.Group();
-    const bg = crowdGeo.body.clone(), eg = crowdGeo.eyes.clone(), data = new Float32Array(n * 3);
-    const body = new THREE.InstancedMesh(bg, crowdMat.body, n), eyes = new THREE.InstancedMesh(eg, crowdMat.eyes, n);
-    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), sc = new THREE.Vector3(), col = new THREE.Color();
-    seats.forEach((st, i) => {
+    const n = seats.length, items = [];
+    const q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), sc = new THREE.Vector3();
+    seats.forEach(st => {
       const k = 0.9 + Math.random() * 0.2;
-      m.compose(v.set(st.x, st.y, st.z), q.setFromEuler(e.set(0, st.yaw + (Math.random() - 0.5) * 0.3, 0)), sc.set(k, k, k));
-      body.setMatrixAt(i, m); eyes.setMatrixAt(i, m);
-      body.setColorAt(i, col.set(CROWD_COL[(Math.random() * CROWD_COL.length) | 0]).convertSRGBToLinear());
-      data[i * 3] = Math.random(); data[i * 3 + 1] = st.s; data[i * 3 + 2] = 1;
+      items.push({ m: new THREE.Matrix4().compose(v.set(st.x, st.y, st.z), q.setFromEuler(e.set(0, st.yaw + (Math.random() - 0.5) * 0.3, 0)), sc.set(k, k, k)),
+        c: new THREE.Color(CROWD_COL[(Math.random() * CROWD_COL.length) | 0]).convertSRGBToLinear(), d: [Math.random(), st.s, 1] });
     });
-    const attr = new THREE.InstancedBufferAttribute(data, 3); bg.setAttribute('aCrowd', attr); eg.setAttribute('aCrowd', attr);
-    body.frustumCulled = eyes.frustumCulled = false;   // r128 liczy granice tylko z geometrii jednego widza
-    group.add(body, eyes);
+    const group = lodInstances(items, it => Math.floor(it.d[1] / 36), Object.assign({ pad: 2.5 }, crowdGeo), 120);
     // flesze aparatów: losowe miejsca na trybunach, częściej przy przejeżdżającym aucie i na mecie
     const nf = Math.min(360, n), fpos = new Float32Array(nf * 3), fcol = new Float32Array(nf * 3), life = new Float32Array(nf);
     for (let i = 0; i < nf; i++) { const st = seats[(Math.random() * n) | 0]; fpos[i * 3] = st.x; fpos[i * 3 + 1] = st.y + 1.3; fpos[i * 3 + 2] = st.z; }
     const fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.BufferAttribute(fpos, 3)); fg.setAttribute('color', new THREE.BufferAttribute(fcol, 3));
     const flash = new THREE.Points(fg, crowdMat.flash); flash.frustumCulled = false; group.add(flash);
-    return { group, flash: { pos: fpos, col: fcol, life, attr: fg.attributes.color } };
+    return { group, lod: group.userData.lod, flash: { pos: fpos, col: fcol, life, attr: fg.attributes.color } };
   }
   // kampery na płycie owalu, jak w „Autach”: rzędy wzdłuż toru, przodem do toru; część z markizą w paski i flagą na maszcie
   const RV_COL = ['#efe6d2', '#f4f1e8', '#d9c7a3', '#c9dbe8', '#e8d0b0', '#b7c9a8', '#f2d6c9', '#e6e6e6', '#8fb8de', '#d8a47f'];
@@ -1087,21 +1185,18 @@
         spots.push({ x, z, yaw: Math.atan2(q.y - p.y, q.x - p.x) + (Math.random() - 0.5) * 0.25 });
       }
     }
-    const n = spots.length; if (!n) return G;
-    const bg = rvGeo.body.clone(), eg = rvGeo.eyes.clone(), data = new Float32Array(n * 3);
-    const body = new THREE.InstancedMesh(bg, crowdMat.body, n), eyes = new THREE.InstancedMesh(eg, crowdMat.eyes, n);
-    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1), col = new THREE.Color();
-    const awn = AWN_MAT.map(() => []), flags = [];
-    spots.forEach((sp, i) => {
-      m.compose(v.set(sp.x, 0, sp.z), q.setFromEuler(e.set(0, sp.yaw, 0)), one);
-      body.setMatrixAt(i, m); eyes.setMatrixAt(i, m);
-      body.setColorAt(i, col.set(RV_COL[(Math.random() * RV_COL.length) | 0]).convertSRGBToLinear());
-      data[i * 3] = Math.random(); data[i * 3 + 2] = 0.15;   // kampery ledwie się kołyszą i nie obracają
-      if (Math.random() < 0.6) awn[(Math.random() * awn.length) | 0].push({ m: m.clone(), ph: data[i * 3] });
-      if (Math.random() < 0.35) flags.push(new THREE.Vector3(-3.4, 0, 1.6).applyMatrix4(m));
+    if (!spots.length) { G.userData.lod = []; return G; }
+    const q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1), col = new THREE.Color(), m = new THREE.Matrix4();
+    const awn = AWN_MAT.map(() => []), flags = [], items = [];
+    spots.forEach(sp => {
+      const it = { m: new THREE.Matrix4().compose(v.set(sp.x, 0, sp.z), q.setFromEuler(e.set(0, sp.yaw, 0)), one),
+        c: new THREE.Color(RV_COL[(Math.random() * RV_COL.length) | 0]).convertSRGBToLinear(), d: [Math.random(), 0, 0.15] };   // kampery ledwie się kołyszą i nie obracają
+      items.push(it);
+      if (Math.random() < 0.6) awn[(Math.random() * awn.length) | 0].push({ m: it.m, ph: it.d[0] });
+      if (Math.random() < 0.35) flags.push(new THREE.Vector3(-3.4, 0, 1.6).applyMatrix4(it.m));
     });
-    const attr = new THREE.InstancedBufferAttribute(data, 3); bg.setAttribute('aCrowd', attr); eg.setAttribute('aCrowd', attr);
-    body.frustumCulled = eyes.frustumCulled = false; G.add(body, eyes);
+    const rv = lodInstances(items, it => `${Math.floor(it.m.elements[12] / 110)},${Math.floor(it.m.elements[14] / 110)}`, Object.assign({ pad: 5 }, rvGeo), 260);
+    G.add(rv); G.userData.lod = rv.userData.lod;
     AWN_MAT.forEach((mat, j) => {
       const list = awn[j]; if (!list.length) return;
       const g = awnGeo.clone(), d = new Float32Array(list.length * 3), im = new THREE.InstancedMesh(g, mat, list.length);
@@ -1282,13 +1377,37 @@
       const bolt = new THREE.Mesh(carGeo.bolt, matDark); spin.add(bolt);
       wheels.push({ piv, spin, front });
     }
+    mergeStatic(body);
     root.traverse(o => { if (o.isMesh) o.receiveShadow = false; });
     return { root, body, wheels, spinA: 0, car };
+  }
+  // nieruchome względem siebie części z tym samym materiałem łączymy w jedną siatkę — mniej wywołań rysowania na każde auto
+  function mergeStatic(group) {
+    const by = new Map();
+    for (const m of group.children) if (m.isMesh) { if (!by.has(m.material)) by.set(m.material, []); by.get(m.material).push(m); }
+    for (const [mat, list] of by) {
+      if (list.length < 2) continue;
+      const parts = list.map(m => { m.updateMatrix(); return (m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone()).applyMatrix4(m.matrix); });
+      const geo = new THREE.BufferGeometry();
+      for (const k of ['position', 'normal', 'uv']) {
+        if (!parts.every(g => g.attributes[k])) continue;
+        const arr = new Float32Array(parts.reduce((n, g) => n + g.attributes[k].array.length, 0));
+        let o = 0; for (const g of parts) { arr.set(g.attributes[k].array, o); o += g.attributes[k].array.length; }
+        geo.setAttribute(k, new THREE.BufferAttribute(arr, parts[0].attributes[k].itemSize));
+      }
+      geo.userData.own = true;
+      const merged = new THREE.Mesh(geo, mat); merged.castShadow = list.some(m => m.castShadow);
+      for (const m of list) group.remove(m);
+      group.add(merged);
+    }
   }
   function buildCar(car, i) { const v = makeCar(car, i); scene.add(v.root); return v; }
   function disposeCar(root) {
     const seen = new Set();
-    root.traverse(o => { const m = o.material; if (m && m.userData.own && !seen.has(m)) { seen.add(m); if (m.map) m.map.dispose(); m.dispose(); } });
+    root.traverse(o => {
+      if (o.geometry && o.geometry.userData.own) o.geometry.dispose();
+      const m = o.material; if (m && m.userData.own && !seen.has(m)) { seen.add(m); if (m.map) m.map.dispose(); m.dispose(); }
+    });
   }
 
   // ─── podgląd auta w menu: osobny mały renderer, auto powoli się obraca ───
@@ -1823,6 +1942,7 @@
       if (e.code === 'KeyB' && !e.repeat) tryPit();
       if (e.code === 'KeyM' && !e.repeat) { cfg.steering = cfg.steering === 'mouse' ? 'keyboard' : 'mouse'; saveCfg(); feed(cfg.steering === 'mouse' ? 'Sterowanie myszą: pozycja kursora = skręt' : 'Sterowanie klawiaturą', 'good'); }
       if (e.code === 'KeyN' && !e.repeat) feed(audio.toggle() ? 'Dźwięk włączony' : 'Dźwięk wyłączony', 'good');
+      if (e.code === 'KeyF' && !e.repeat) { cfg.showFps = !cfg.showFps; saveCfg(); $('#hFps').hidden = !cfg.showFps; }
     }
   });
   window.addEventListener('keyup', e => { keys[e.code] = false; });
@@ -2154,6 +2274,8 @@
     const hb = $('#hBest'); hb.textContent = fmtT(p.bestLap);
     const allBest = Math.min(...race.cars.map(c => c.bestLap)); hb.classList.toggle('pb', isFinite(p.bestLap) && p.bestLap <= allBest);
     $('#hSpd').textContent = Math.round(spd(p.speed));
+    const fe = $('#hFps'); fe.hidden = !cfg.showFps;
+    if (cfg.showFps) fe.innerHTML = `FPS <b>${Math.round(gfx.fps)}</b> · ${renderer.domElement.width}×${renderer.domElement.height}${cfg.gfx === 'auto' ? ' auto' : ''}`;
     const rpm = engineRpm(p, race.track);
     $('#hRpm').style.width = `${clamp((rpm - 2500) / 7000, 0, 1) * 100}%`; $('#hGear').textContent = p.gear;
     $('#hDraft').style.width = `${clamp(p.draft / 0.38, 0, 1) * 100}%`; $('#hDraftV').textContent = `${Math.round(p.draft * 100)}%`;
@@ -3228,6 +3350,7 @@
   function frame(now) {
     requestAnimationFrame(frame);
     lastRaf = performance.now();
+    gfxTick(now - last);
     const dt = Math.min(0.05, Math.max(0, (now - last) / 1000)); last = now;
     step(dt);
     renderer.render(scene, camera);
@@ -3244,6 +3367,7 @@
       step(dt);
     };
   } catch (e) { /* bez workera gospodarz w tle wstrzymuje wyścig */ }
+  const _sunT = new THREE.Vector3();
   function step(dt) {
     netTick(dt);
     if (race) {
@@ -3277,7 +3401,8 @@
       updateCrowd(dt);
       updateFx(dt);
       if (!pod) updateCamera(dt);
-      const tgt = pod ? pod.center.clone() : focus ? new THREE.Vector3(focus.x, 0, -focus.y) : new THREE.Vector3();
+      updateLod();
+      const tgt = pod ? _sunT.copy(pod.center) : focus ? _sunT.set(focus.x, 0, -focus.y) : _sunT.set(0, 0, 0);
       sun.position.copy(tgt).addScaledVector(sunDir, 200); sun.target.position.copy(tgt); sun.target.updateMatrixWorld();
       sky.position.copy(camera.position);
       if (state === 'race') { updateHud(dt); audio.update(race.player && race.player.status !== 'out' ? race.player : null, paused ? null : race); }
@@ -3286,7 +3411,7 @@
     }
   }
 
-  window.__s500 = { get race() { return race; }, camera, scene, setCam(m) { camMode = m; snapCam = true; },
+  window.__s500 = { get race() { return race; }, camera, scene, renderer, gfx, setCam(m) { camMode = m; snapCam = true; },
     run(sec, keysDown) { Object.assign(keys, keysDown || {}); for (let t = 0; t < sec; t += 1 / 60) step(1 / 60); renderer.render(scene, camera); }, get visuals() { return visuals; },
     get podium() { return pod; }, skipPodium() { podiumToResults(); } };
   const boot = () => { startAttract(); requestAnimationFrame(frame); };
