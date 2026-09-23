@@ -29,16 +29,16 @@
   const PEAK_SLIP = Math.tan(PI / (2 * CAR.C)) / CAR.B;
 
   const ROSTER = [
-    { name: 'K. Nowak', number: 7, color: '#d7263d', color2: '#f4f1de' },
-    { name: 'T. Walsh', number: 12, color: '#1f4e9c', color2: '#f4c20d' },
-    { name: 'R. Duarte', number: 19, color: '#1b998b', color2: '#0b1320' },
-    { name: 'M. Brenner', number: 21, color: '#f4c20d', color2: '#1d1d1d' },
-    { name: 'D. Okafor', number: 33, color: '#6a4c93', color2: '#ffffff' },
-    { name: 'S. Lindqvist', number: 44, color: '#ff7f11', color2: '#101820' },
-    { name: 'A. Moreau', number: 51, color: '#2e2e33', color2: '#ff3c38' },
-    { name: 'J. Kowalczyk', number: 66, color: '#e9ecef', color2: '#c1121f' },
-    { name: 'B. Hollis', number: 77, color: '#3a7d44', color2: '#f2e8cf' },
-    { name: 'L. Ferraz', number: 88, color: '#0096c7', color2: '#ffffff' },
+    { name: 'K. Nowak', number: 7, color: '#d7263d', color2: '#f4f1de', model: 'sedan' },
+    { name: 'T. Walsh', number: 12, color: '#1f4e9c', color2: '#f4c20d', model: 'fastback' },
+    { name: 'R. Duarte', number: 19, color: '#1b998b', color2: '#0b1320', model: 'coupe' },
+    { name: 'M. Brenner', number: 21, color: '#f4c20d', color2: '#1d1d1d', model: 'sedan' },
+    { name: 'D. Okafor', number: 33, color: '#6a4c93', color2: '#ffffff', model: 'pickup' },
+    { name: 'S. Lindqvist', number: 44, color: '#ff7f11', color2: '#101820', model: 'fastback' },
+    { name: 'A. Moreau', number: 51, color: '#2e2e33', color2: '#ff3c38', model: 'coupe' },
+    { name: 'J. Kowalczyk', number: 66, color: '#e9ecef', color2: '#c1121f', model: 'sedan' },
+    { name: 'B. Hollis', number: 77, color: '#3a7d44', color2: '#f2e8cf', model: 'pickup' },
+    { name: 'L. Ferraz', number: 88, color: '#0096c7', color2: '#ffffff', model: 'fastback' },
   ];
 
   // Owale liczone analitycznie. Tory drogowe: łamana z mapy (px, oś y w dół) o zaokrąglonych narożnikach,
@@ -515,10 +515,15 @@
       let field;
       if (o.field) field = o.field.map(c => Object.assign({}, c));     // gra online: skład i kolejność ustala gospodarz
       else {
-        const player = { name: 'TY', number: 10, color: '#f4c20d', color2: '#101012', isPlayer: true };
-        field = shuffle(ROSTER.slice(0, o.attract ? 10 : 9));
+        // wygląd auta gracza (numer, barwy, nadwozie) z menu; osiągi są takie same dla wszystkich
+        const player = Object.assign({ name: 'TY', number: 10, color: '#f4c20d', color2: '#101012', model: 'sedan' }, o.player, { isPlayer: true });
+        field = shuffle(ROSTER.slice(0, o.attract ? 10 : 9)).map(c => Object.assign({}, c));
         if (!o.attract) field.splice(clamp(o.grid, 1, 10) - 1, 0, player);
       }
+      // numery w stawce są różne: ludzie zachowują swoje, auto AI z zajętym numerem dostaje następny wolny
+      // (deterministycznie — goście online liczą to samo z tej samej stawki)
+      const human = new Set(field.filter(c => c.isPlayer).map(c => c.number)), taken = new Set(field.map(c => c.number));
+      for (const c of field) if (!c.isPlayer && human.has(c.number)) { let n = c.number; while (taken.has(n)) n = (n + 1) % 100; taken.add(n); c.number = n; }
       // isPlayer = auto prowadzone przez człowieka (w sieci może ich być kilka); this.player = auto na tym komputerze
       this.cars = field.map((c, i) => new Car(Object.assign({ id: i, grid: i + 1, isPlayer: false }, c)));
       this.player = (o.localId != null ? this.cars.find(c => c.netId === o.localId) : this.cars.find(c => c.isPlayer)) || null;
@@ -530,7 +535,8 @@
         c.x = p.x; c.y = p.y; c.psi = f.th; c.s = s; c.d = d;
         c.prog = tr.ds(0, s); c.gridLane = d;
         c.vx = Math.cos(f.th) * tr.pace; c.vy = Math.sin(f.th) * tr.pace;
-        const skill = c.skill != null ? c.skill : c.isPlayer ? 10 : clamp(o.difficulty + (Math.random() - 0.5) * (o.attract ? 3 : 0.8), 1, 10);
+        // rozrzut umiejętności w stawce; na poziomie 10 i 11 cała stawka jeździ na maksimum
+        const skill = c.skill != null ? c.skill : c.isPlayer ? 10 : o.difficulty >= 10 && !o.attract ? 10 : clamp(o.difficulty + (Math.random() - 0.5) * (o.attract ? 3 : 0.8), 1, 10);
         // poziom 11: kierowcy jak na 10, ale silniki AI mają o 1% więcej mocy
         if (!c.isPlayer && o.difficulty >= 11) c.boost = 1.01;
         c.pitBox = i;
@@ -1163,9 +1169,12 @@
           }
         }
       }
+      // Tor drogowy: linia wyścigowa przechodzi od krawędzi do krawędzi, więc stały pas (za tunelem, w ruchu, do blokowania)
+      // to jazda obok linii — tam trzymaj się linii, a od sąsiadów odsuwa sideLimit. Pasy to sprawa owali.
+      const oval = tr.kind === 'oval';
       // szukanie tunelu: przejdź za samochód z przodu w innym pasie
       if (!ahead || aheadDs > 60) {
-        if (tr.id !== 'short' && Math.random() < 0.15 + 0.6 * k) {
+        if (oval && tr.id !== 'short' && Math.random() < 0.15 + 0.6 * k) {
           let tgt = null, bd = 1e9;
           for (const o of race.cars) {
             if (o === c || o.status !== 'racing') continue;
@@ -1181,11 +1190,11 @@
         else if (Math.abs(dc.d - c.d) < 3 && this.laneFree(dc.d, -8, g - 4)) { this.lane = clamp(dc.d, -tr.halfW + 1.2, tr.halfW - 1.3); return; }
       }
       // w tunelu trzymaj się osi auta z przodu (wyrównanie pociągu)
-      if (tr.id !== 'short' && ahead && aheadDs < 45 && ahead.status === 'racing' && Math.random() < 0.3 + 0.7 * k && !tr.inTurn(c.s + 20)) {
+      if (oval && tr.id !== 'short' && ahead && aheadDs < 45 && ahead.status === 'racing' && Math.random() < 0.3 + 0.7 * k && !tr.inTurn(c.s + 20)) {
         if (this.mode === 'line' && this.laneFree(ahead.d, -8, aheadDs - 4)) { this.lane = clamp(ahead.d, -tr.halfW + 1.2, tr.halfW - 1.3); return; }
       }
       // blokowanie: dobry, agresywny kierowca zamyka pas atakującemu
-      if (k > 0.4 && this.blockT <= 0 && !tr.inTurn(c.s) && !tr.inTurn(c.s + c.u * 1.5)) {
+      if (oval && k > 0.4 && this.blockT <= 0 && !tr.inTurn(c.s) && !tr.inTurn(c.s + c.u * 1.5)) {
         for (const o of race.cars) {
           if (o === c || o.status !== 'racing') continue;
           const ds = tr.ds(c.s, o.s), dd = o.d - c.d;
@@ -1198,7 +1207,7 @@
       // w ruchu trzymaj swój pas zamiast nurkować linią wyścigową przez sąsiadów
       const traffic = race.cars.some(o => o !== c && o.status !== 'out' && Math.abs(tr.ds(c.s, o.s)) < 22 && Math.abs(o.d - c.d) < 5);
       if (this.mode === 'line') {
-        if (traffic) { if (this.lane == null) { const d = clamp(this.dS, -tr.halfW + 1.2, tr.halfW - 1.3); if (this.feasible(d) || tr.inTurn(c.s)) this.lane = d; } }
+        if (traffic && oval) { if (this.lane == null) { const d = clamp(this.dS, -tr.halfW + 1.2, tr.halfW - 1.3); if (this.feasible(d) || tr.inTurn(c.s)) this.lane = d; } }
         else if (this.lane != null && this.laneFree(this.lineD(c.s + 20), -10, 20)) this.lane = null;
       }
     }
@@ -1229,7 +1238,11 @@
       let dAhead = this.dS + (this.lane == null && this.mode !== 'pace' ? (this.lineD(c.s + Lk) - this.lineD(c.s + 15)) : 0);
       if (this.lo != null) dAhead = clamp(dAhead, Math.min(this.lo, this.hi), Math.max(this.lo, this.hi));
       const p = tr.toWorld(c.s + Lk, dAhead);
-      const cp = Math.cos(c.psi), sp = Math.sin(c.psi);
+      // Szybki łuk owalu, w którym odpuszcza się gaz: na linii celuj kierunkiem jazdy, nie nosem auta. Przy znoszeniu nos
+      // patrzy do środka, a auto sunie w górę toru — według nosa kierowca uznałby, że trzyma linię, i dojechałby do ściany.
+      // (Na superspeedwayu auto nie dochodzi do granicy przyczepności, a w ciasnym pociągu poprawka tylko szkodzi.)
+      const beta = tr.kind === 'oval' && tr.id !== 'speedway' && u > 45 && this.lane == null && tr.inTurn(c.s) && c.hit < 0.05 ? clamp(Math.atan2(c.v, u), -0.05, 0.05) : 0;
+      const chi = c.psi + beta, cp = Math.cos(chi), sp = Math.sin(chi);
       const dx = (p.x - c.x) * cp + (p.y - c.y) * sp, dy = -(p.x - c.x) * sp + (p.y - c.y) * cp;
       const kap = 2 * dy / (dx * dx + dy * dy);
       const rDes = u * kap;

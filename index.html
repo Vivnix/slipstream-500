@@ -84,6 +84,23 @@
   .go:active { transform: skewX(-9deg) translateY(3px); box-shadow: 0 3px 0 #8a6d00; }
   .keys { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 13px; color: var(--muted); }
   .keys kbd { font: 600 12px/1 var(--display); letter-spacing: 0.04em; color: var(--ink); background: #22262d; border: 1px solid #353a44; border-bottom-width: 2px; border-radius: 4px; padding: 3px 6px; white-space: nowrap; }
+  /* twoje auto */
+  .garage { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 12px; align-items: start; }
+  .garage canvas { width: 200px; height: 150px; display: block; border-radius: 6px; border: 1px solid var(--line); background: radial-gradient(ellipse at 50% 72%, #2a2e36 0%, #14161a 72%); }
+  .garage-opts { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .garage .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .garage .card { padding: 7px 10px 6px; gap: 1px; }
+  .garage .card strong { font-size: 17px; }
+  .garage .card span { font-size: 12px; }
+  .livery { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: flex-start; }
+  .lv { display: flex; flex-direction: column; gap: 6px; }
+  .lv > span { font: 600 11px/1 var(--body); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .carnum { width: 3.4ch; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px 1px; font: 800 24px/1 var(--display); text-align: center; font-variant-numeric: tabular-nums; }
+  .sw { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; max-width: 250px; }
+  .sw button { width: 22px; height: 22px; border-radius: 50%; border: 2px solid rgba(255,255,255,.18); padding: 0; }
+  .sw button[aria-pressed="true"], .sw input.on { border-color: var(--caution); box-shadow: 0 0 0 2px var(--ground) inset; }
+  .sw input[type=color] { width: 30px; height: 24px; padding: 1px; border: 2px solid var(--line); border-radius: 6px; background: var(--panel-2); cursor: pointer; }
+  @media (max-width: 560px) { .garage { grid-template-columns: minmax(0, 1fr); } .garage canvas { width: 100%; height: auto; aspect-ratio: 4 / 3; max-width: 320px; } }
   /* dźwięk */
   .snd .seg { align-self: flex-start; }
   .sndgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 2px 22px; }
@@ -183,6 +200,8 @@
   .pit-msg.serv { border-left-color: var(--green); }
   .tower .pit { font-size: 11px; font-weight: 800; color: var(--caution-ink); background: var(--caution); border-radius: 2px; padding: 1px 3px 0; margin-left: 4px; letter-spacing: .06em; }
   .touch .tpit { width: 58px; height: 42px; border-radius: 8px; bottom: 116px; font-size: 16px; }
+  .look-tag { position: absolute; left: 50%; top: 62px; transform: translateX(-50%) skewX(-8deg); font: 700 16px/1 var(--display); letter-spacing: .14em; text-transform: uppercase;
+    padding: 7px 14px 6px; border-radius: 4px; background: rgba(10,11,14,.8); border-left: 4px solid #5ad0ff; color: #bfe9ff; white-space: nowrap; }
   .dmg { position: absolute; right: 14px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); width: 232px; background: rgba(10,11,14,.66); border-radius: 6px; padding: 10px 12px;
     font: 600 14px/1.3 var(--display); letter-spacing: .03em; display: grid; gap: 6px; }
   .dmg h4 { margin: 0; font: 600 12px/1 var(--body); letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
@@ -284,7 +303,7 @@
       <header class="brand">
         <h1>Slipstream <span>500</span></h1>
         <div class="checker" aria-hidden="true"></div>
-        <p>Wyścigi stock car na owalach i torach drogowych. Dziesięć identycznych aut, przechylone zakręty, tunel aerodynamiczny, zużycie opon, pit stopy i kontakt zderzak w zderzak.</p>
+        <p>Wyścigi stock car na owalach i torach drogowych. Dziesięć aut o identycznych osiągach, przechylone zakręty, tunel aerodynamiczny, zużycie opon, pit stopy i kontakt zderzak w zderzak.</p>
       </header>
 
       <div class="group hostset">
@@ -307,6 +326,22 @@
         <div class="label">Fizyka uszkodzeń</div>
         <div class="cards" id="optDamage"></div>
         <p class="blurb" id="damageBlurb"></p>
+      </div>
+
+      <div class="group" id="grpCar">
+        <div class="label">Twoje auto <b id="carVal"></b></div>
+        <div class="garage">
+          <canvas id="carPrev" width="400" height="300" aria-label="Podgląd twojego auta" role="img"></canvas>
+          <div class="garage-opts">
+            <div class="cards" id="optModel"></div>
+            <div class="livery">
+              <label class="lv"><span>Numer</span><input id="carNum" class="carnum" inputmode="numeric" maxlength="2" autocomplete="off" aria-label="Numer auta (0–99)"></label>
+              <div class="lv"><span>Nadwozie</span><div class="sw" id="palBody"></div></div>
+              <div class="lv"><span>Numer, spoiler i felgi</span><div class="sw" id="palTrim"></div></div>
+            </div>
+          </div>
+        </div>
+        <p class="note">Nadwozia różnią się tylko wyglądem — <b>moc, opór i przyczepność są takie same</b>. Jeśli w stawce ktoś ma już twój numer, auto AI dostaje inny; w pokoju online zajęty numer gospodarz zmieni na wolny.</p>
       </div>
 
       <div class="row">
@@ -353,8 +388,8 @@
         <kbd>S / ↓</kbd><span>hamulec</span>
         <kbd>A D / ← →</kbd><span>skręt (krótkie stuknięcia — na owalu kierownica prawie stoi w miejscu)</span>
         <kbd>B</kbd><span>zjazd do boksu na najbliższym okrążeniu (opony, naprawa) — w alei prowadzi autopilot z limiterem</span>
-        <kbd>C</kbd><span>kamera · <kbd>R</kbd> powrót na tor po obrocie · <kbd>P</kbd> pauza · <kbd>M</kbd> sterowanie myszą · <kbd>N</kbd> dźwięk</span>
-        <kbd>Pad</kbd><span>lewa gałka skręt, RT gaz, LT hamulec, Y kamera, X boks</span>
+        <kbd>C</kbd><span>kamera · <kbd>Q</kbd> patrz do tyłu (trzymaj) · <kbd>R</kbd> powrót na tor po obrocie · <kbd>P</kbd> pauza · <kbd>M</kbd> sterowanie myszą · <kbd>N</kbd> dźwięk</span>
+        <kbd>Pad</kbd><span>lewa gałka skręt, RT gaz, LT hamulec, Y kamera, X boks, LB widok do tyłu</span>
       </div>
     </div>
     <div class="attract-tag">Transmisja na żywo · AI poziom 7</div>
@@ -373,6 +408,7 @@
     <div id="spotMsg" class="spot-msg"></div>
     <div id="banner" class="banner"></div>
     <div id="pitMsg" class="pit-msg" hidden></div>
+    <div id="lookTag" class="look-tag" hidden>Widok do tyłu</div>
     <div id="feed" class="feed" aria-live="polite"></div>
     <canvas id="mini" width="440" height="260"></canvas>
     <div class="dash">
@@ -383,13 +419,14 @@
       <div class="pedals"><div class="bar"><i id="hThr"></i></div><div class="bar"><i id="hBrk"></i></div></div>
     </div>
     <div id="dmg" class="dmg"></div>
-    <div class="hint" id="hint">B boks · C kamera · R powrót na tor · P pauza · M mysz · N dźwięk</div>
+    <div class="hint" id="hint">B boks · C kamera · Q do tyłu · R powrót na tor · P pauza · M mysz · N dźwięk</div>
     <div class="touch" id="touch">
       <button data-k="left" style="left:16px">◀</button>
       <button data-k="right" style="left:112px">▶</button>
       <button data-k="brake" style="right:112px">HAM</button>
       <button data-k="gas" style="right:16px">GAZ</button>
       <button data-k="pit" class="tpit" style="right:16px">BOX</button>
+      <button data-k="back" class="tpit" style="left:16px">TYŁ</button>
     </div>
   </section>
 
@@ -469,8 +506,28 @@
     simple: { name: 'Uproszczona', tag: 'jeden pasek stanu', blurb: 'Każdy kontakt obniża ogólny stan auta: nieco mniej mocy i gorsza aerodynamika. Bez przebitych opon i bez odpadania z wyścigu.' },
     none: { name: 'Brak', tag: 'tylko fizyka zderzeń', blurb: 'Kontakt nadal odpycha i może obrócić auto, ale nic się nie psuje. Dobre do nauki jazdy w tunelu.' },
   };
-  const defaults = { track: 'speedway', len: 1, difficulty: 5, damage: 'simple', tires: 'normal', grid: 8, steering: 'keyboard', assists: true, units: 'kmh', name: '', netAi: 'fill' };
+  // wygląd auta gracza — same barwy i nadwozie, osiągi wszystkich aut są identyczne
+  const CAR_MODELS = [
+    { id: 'sedan', name: 'Sedan', tag: 'klasyczny stock car' },
+    { id: 'fastback', name: 'Fastback', tag: 'długa, opadająca szyba' },
+    { id: 'coupe', name: 'Coupé', tag: 'niski nos, krótka kabina' },
+    { id: 'pickup', name: 'Pickup', tag: 'jak w serii truck' },
+  ];
+  const PAL_BODY = [['#f4c20d', 'żółty'], ['#ff7f11', 'pomarańczowy'], ['#d7263d', 'czerwony'], ['#ff5d8f', 'różowy'], ['#9b5de5', 'fioletowy'], ['#1f4e9c', 'granatowy'],
+    ['#00b4d8', 'błękitny'], ['#1b998b', 'morski'], ['#3a7d44', 'zielony'], ['#8ac926', 'limonkowy'], ['#f7f7f2', 'biały'], ['#8d99ae', 'srebrny'], ['#2e2e33', 'grafitowy'], ['#101012', 'czarny']];
+  const PAL_TRIM = [['#101012', 'czarny'], ['#f7f7f2', 'biały'], ['#f4c20d', 'żółty'], ['#d7263d', 'czerwony'], ['#ff7f11', 'pomarańczowy'], ['#00b4d8', 'błękitny'], ['#8ac926', 'limonkowy'], ['#9b5de5', 'fioletowy']];
+  const HEX = /^#[0-9a-f]{6}$/i;
+  // kolory trafiają do atrybutów style w HTML, więc z sieci i z pamięci przyjmujemy wyłącznie #rrggbb
+  function cleanCar(c, d = defaults.car) {
+    c = c && typeof c === 'object' ? c : {};
+    const n = +c.number;
+    return { number: Number.isInteger(n) && n >= 0 && n <= 99 ? n : d.number, color: HEX.test(c.color) ? c.color.toLowerCase() : d.color,
+      color2: HEX.test(c.color2) ? c.color2.toLowerCase() : d.color2, model: CAR_MODELS.some(m => m.id === c.model) ? c.model : d.model };
+  }
+  const defaults = { track: 'speedway', len: 1, difficulty: 5, damage: 'simple', tires: 'normal', grid: 8, steering: 'keyboard', assists: true, units: 'kmh', name: '', netAi: 'fill',
+    car: { number: 10, color: '#f4c20d', color2: '#101012', model: 'sedan' } };
   const cfg = Object.assign({}, defaults, store.get('cfg', {}));
+  cfg.car = cleanCar(cfg.car);
   if (!Sim.TRACKS[cfg.track]) cfg.track = 'speedway';
   if (!DAMAGE[cfg.damage]) cfg.damage = 'simple';
   if (!TIRES[cfg.tires]) cfg.tires = 'normal';
@@ -519,8 +576,41 @@
     if (!gsel.options.length) for (let i = 1; i <= 10; i++) gsel.add(new Option(i === 1 ? '1 (pole position)' : String(i), String(i)));
     gsel.value = String(cfg.grid);
     seg($('#optAi'), [['fill', 'Dopełnij do 10 aut'], ['none', 'Bez AI']], () => cfg.netAi, v => { cfg.netAi = v; });
+    renderCarMenu();
     renderNet();
   }
+  // ─── twoje auto: model, numer, barwy (podgląd 3D rysuje garage, gdy scena jest gotowa) ───
+  function swatches(el, pal, key) {
+    const cur = cfg.car[key];
+    el.innerHTML = pal.map(([hex, name]) => `<button type="button" style="background:${hex}" aria-label="${name}" title="${name}" aria-pressed="${hex === cur}" data-c="${hex}"></button>`).join('') +
+      `<input type="color" aria-label="Dowolny kolor" title="Dowolny kolor" value="${cur}">`;
+    const pick = el.querySelector('input');
+    if (!pal.some(([hex]) => hex === cur)) pick.classList.add('on');
+    el.querySelectorAll('button').forEach(b => b.onclick = () => { cfg.car[key] = b.dataset.c; saveCfg(); renderMenu(); });
+    pick.oninput = () => { cfg.car[key] = pick.value.toLowerCase(); el.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false')); pick.classList.add('on'); carChanged(); };
+    pick.onchange = () => { saveCfg(); renderMenu(); };
+  }
+  function renderCarMenu() {
+    cards($('#optModel'), CAR_MODELS, () => cfg.car.model, v => { cfg.car.model = v; });
+    swatches($('#palBody'), PAL_BODY, 'color');
+    swatches($('#palTrim'), PAL_TRIM, 'color2');
+    const num = $('#carNum');
+    if (document.activeElement !== num) num.value = cfg.car.number;
+    carChanged();
+  }
+  let garage = null;   // podgląd auta w menu
+  function carChanged() {
+    const m = CAR_MODELS.find(x => x.id === cfg.car.model);
+    $('#carVal').textContent = `#${cfg.car.number} · ${m.name}`;
+    if (garage) garage.set(cfg.car);
+  }
+  $('#carNum').addEventListener('input', e => {
+    const v = e.target.value.replace(/\D/g, '').slice(0, 2);
+    if (v !== e.target.value) e.target.value = v;
+    if (v === '') return;
+    cfg.car.number = +v; saveCfg(); carChanged(); renderNet();
+  });
+  $('#carNum').addEventListener('blur', e => { e.target.value = cfg.car.number; });
   function retrack() { if (state === 'menu' && attract && attract.track.id !== menuTrack()) startAttract(); }
   $('#optDiff').addEventListener('input', e => { cfg.difficulty = +e.target.value; saveCfg(); renderMenu(); });
   $('#optGrid').addEventListener('change', e => { cfg.grid = +e.target.value; saveCfg(); });
@@ -610,11 +700,17 @@
     for (let i = -w; i < w * 2; i += 16) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i + h, h); g.stroke(); g.beginPath(); g.moveTo(i, h); g.lineTo(i + h, 0); g.stroke(); }
     g.fillStyle = 'rgba(210,214,220,.9)'; g.fillRect(0, 0, w, 3);
   }, true);
-  T.crowd = tex(512, 128, (g, w, h) => {
-    g.fillStyle = '#2b2b33'; g.fillRect(0, 0, w, h);
-    const cols = ['#d7263d', '#f4c20d', '#1f4e9c', '#f1f1f1', '#ff7f11', '#3a7d44', '#6a4c93', '#e9d8a6'];
-    for (let i = 0; i < 2600; i++) { g.fillStyle = cols[(Math.random() * cols.length) | 0]; g.fillRect(Math.random() * w, Math.random() * h, 3, 4); }
-    g.fillStyle = 'rgba(0,0,0,.35)'; for (let y = 0; y < h; y += 16) g.fillRect(0, y, w, 4);
+  // stopnie trybun (9 pasów = 9 rzędów): ściana stopnia w dolnych 60% pasa, podest z krzesełkami nad nią — widzami są autka (buildCrowd)
+  T.crowd = tex(512, 256, (g, w, h) => {
+    const n = 9, bh = h / n;
+    for (let i = 0; i < n; i++) {
+      const y1 = h - i * bh;
+      g.fillStyle = '#8f8d86'; g.fillRect(0, y1 - bh, w, bh);
+      g.fillStyle = i % 2 ? '#b8322a' : '#1f4e9c'; g.fillRect(0, y1 - bh * 0.6, w, bh * 0.6);
+      g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(0, y1 - bh * 0.6, w, 2);
+      g.fillStyle = '#d9d6cc'; for (let x = 4; x < w; x += 32) g.fillRect(x, y1 - bh * 0.95, 22, bh * 0.3);
+    }
+    speckle(g, w, h, 5000, 60, 140);
   }, true);
   T.road = tex(512, 512, (g, w, h) => {
     g.fillStyle = '#3b3d42'; g.fillRect(0, 0, w, h); speckle(g, w, h, 26000, 30, 110);
@@ -779,7 +875,8 @@
     grass.rotation.x = -Math.PI / 2; grass.position.set(cx, -0.06, -cy); grass.receiveShadow = true;
     T.grass.repeat.set(gx / 14, gy / 14); G.add(grass);
     // trybuny wzdłuż prostej startowej, po stronie przeciwnej do alei serwisowej
-    const ss = -sd, sl = road ? 360 : tr.L * 0.86, rowsN = 16;
+    // stopnie są szerokie (RD) — na każdym stoi rząd widzów-samochodzików
+    const ss = -sd, sl = road ? 360 : tr.L * 0.86, rowsN = 9, RD = 2, RH = 0.95;
     let base = 0;
     for (let s = -sl / 2; s <= sl / 2; s += 10) {
       const wd = wallAt(s, ss), h0 = tr.height(s, ss * hw);
@@ -789,19 +886,26 @@
     for (let s = -sl / 2; s <= sl / 2 + 0.01; s += 8) {
       const r = [], ru = [];
       for (let k = 0; k <= rowsN; k++) {
-        const a = tr.toWorld(s, ss * (base + k)), b = a;
-        r.push([a.x, k * 0.62, -a.y]); r.push([b.x, (k + 1) * 0.62, -b.y]);
+        const a = tr.toWorld(s, ss * (base + k * RD)), b = a;
+        r.push([a.x, k * RH, -a.y]); r.push([b.x, (k + 1) * RH, -b.y]);
         ru.push([s / 8, k / rowsN]); ru.push([s / 8, (k + 0.6) / rowsN]);
       }
       st.push(ss > 0 ? r : r.slice().reverse()); stUV.push(ss > 0 ? ru : ru.slice().reverse());
-      const r0 = tr.toWorld(s, ss * (base - 2)), r1 = tr.toWorld(s, ss * (base + rowsN + 2)), hR = rowsN * 0.62 + 5.5;
+      const r0 = tr.toWorld(s, ss * (base - 2)), r1 = tr.toWorld(s, ss * (base + rowsN * RD + 2)), hR = rowsN * RH + 5.5;
       rf.push([[r0.x, hR, -r0.y], [r1.x, hR, -r1.y]]);
-      const w0 = tr.toWorld(s, ss * (base + rowsN + 1));
-      bw.push([[w0.x, 0, -w0.y], [w0.x, rowsN * 0.62 + 6, -w0.y]]);
+      const w0 = tr.toWorld(s, ss * (base + rowsN * RD + 1));
+      bw.push([[w0.x, 0, -w0.y], [w0.x, rowsN * RH + 6, -w0.y]]);
     }
     G.add(ribbon(st, stUV, M.crowd));
     const roof = ribbon(rf, rf.map(() => [[0, 0], [1, 0]]), M.steel, true); G.add(roof);
     G.add(ribbon(bw, bw.map(() => [[0, 0], [1, 0]]), M.concrete));
+    const seats = [];
+    for (let k = 0; k < rowsN; k++) for (let s = -sl / 2 + 1; s <= sl / 2 - 1; s += 1.7) {
+      if (Math.random() < 0.05) continue;
+      const s1 = s + (Math.random() - 0.5) * 0.3, a = tr.toWorld(s1, ss * (base + (k + 0.5) * RD)), b = tr.toWorld(s1, ss * (base + (k + 0.5) * RD - 1));
+      seats.push({ x: a.x, y: (k + 1) * RH, z: -a.y, yaw: Math.atan2(b.y - a.y, b.x - a.x), s: s1 });
+    }
+    const crowd = buildCrowd(seats); G.add(crowd.group);
     // kamery telewizyjne dookoła toru: na drogowym po zewnętrznej stronie najbliższego łuku
     const tv = [], nTv = road ? Math.round(tr.len / 280) : 10;
     for (let i = 0; i < nTv; i++) {
@@ -811,28 +915,211 @@
       const p = W3(tr, s, side * off, 0);
       tv.push({ s, pos: new THREE.Vector3(p[0], tr.height(s, side * hw) + (road ? 12 : 16), p[2]) });
     }
-    world = { group: G, tv, track: tr, boxes };
+    world = { group: G, tv, track: tr, boxes, crowd };
+  }
+
+  // ─── publiczność jak w „Autach”: widzowie to samochodziki z oczami na przedniej szybie ───
+  // Podskoki, obracanie się za autem w kadrze i meksykańska fala liczą się w shaderze — bez aktualizacji tysięcy macierzy co klatkę.
+  // górna połowa: szyba z oczami, dolna: uśmiech na zderzaku (reszta przezroczysta)
+  T.eyes = tex(256, 256, (g, w, h2) => {
+    const h = h2 / 2;
+    g.clearRect(0, 0, w, h2);
+    g.save(); g.translate(w / 2, h + 28);
+    g.fillStyle = '#2a0f10'; g.beginPath(); g.moveTo(-112, -14); g.quadraticCurveTo(0, 12, 112, -14); g.quadraticCurveTo(80, 44, 0, 46); g.quadraticCurveTo(-80, 44, -112, -14); g.fill();
+    g.fillStyle = '#f4f1e8'; g.beginPath(); g.moveTo(-96, -8); g.quadraticCurveTo(0, 14, 96, -8); g.lineTo(88, 4); g.quadraticCurveTo(0, 26, -88, 4); g.fill();
+    g.restore();
+    const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#34506e'); gr.addColorStop(1, '#141c28');
+    g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    for (const sx of [-1, 1]) {
+      const cx = w / 2 + sx * 60, cy = h * 0.55;
+      g.fillStyle = '#f8f6ef'; g.beginPath(); g.ellipse(cx, cy, 50, 46, 0, 0, 7); g.fill();
+      g.fillStyle = '#3d7fc4'; g.beginPath(); g.arc(cx - sx * 6, cy + 4, 25, 0, 7); g.fill();
+      g.fillStyle = '#0d0f14'; g.beginPath(); g.arc(cx - sx * 6, cy + 4, 13, 0, 7); g.fill();
+      g.fillStyle = '#fff'; g.beginPath(); g.arc(cx - sx * 6 + 7, cy - 4, 5, 0, 7); g.fill();
+      g.fillStyle = 'rgba(10,14,20,.55)'; g.beginPath(); g.ellipse(cx, cy - 40, 54, 16, 0, 0, 7); g.fill();   // cień powieki
+    }
+  });
+  const crowdGeo = (() => {
+    const sh = new THREE.Shape();
+    sh.moveTo(-0.95, 0.2); sh.lineTo(0.9, 0.2); sh.quadraticCurveTo(1.0, 0.22, 0.99, 0.42); sh.lineTo(0.9, 0.56); sh.lineTo(0.42, 0.62);
+    sh.lineTo(0.14, 0.97); sh.quadraticCurveTo(-0.2, 1.05, -0.55, 0.98); sh.quadraticCurveTo(-0.9, 0.9, -0.97, 0.55); sh.lineTo(-0.97, 0.26); sh.closePath();
+    const shell = new THREE.ExtrudeGeometry(sh, { depth: 1.1, bevelEnabled: false, curveSegments: 3 }); shell.translate(0, 0, -0.55);
+    const parts = [[shell, [1, 1, 1]], [new THREE.BoxGeometry(0.1, 0.12, 1.04).translate(0.99, 0.3, 0), [0.25, 0.25, 0.25]]];
+    for (const x of [-0.6, 0.6]) for (const z of [-0.52, 0.52]) parts.push([new THREE.BoxGeometry(0.38, 0.38, 0.14).translate(x, 0.19, z), [0.06, 0.06, 0.06]]);
+    // kolor wierzchołków mnożony przez kolor egzemplarza: karoseria bierze kolor widza, koła i zderzak zostają ciemne
+    const pos = [], nor = [], col = [];
+    for (const [g0, c] of parts) {
+      const g = g0.index ? g0.toNonIndexed() : g0, p = g.attributes.position.array, n = g.attributes.normal.array;
+      for (let i = 0; i < p.length; i++) { pos.push(p[i]); nor.push(n[i]); }
+      for (let i = 0; i < p.length / 3; i++) col.push(c[0], c[1], c[2]);
+    }
+    const body = new THREE.BufferGeometry();
+    body.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); body.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); body.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    // szyba z oczami: płaszczyzna położona na pochyłości od (0.42, 0.62) do (0.14, 0.97)
+    const glass = new THREE.PlaneGeometry(1.0, 0.42), up = new THREE.Vector3(-0.28, 0.35, 0).normalize(), out = new THREE.Vector3(up.y, -up.x, 0);
+    glass.applyMatrix4(new THREE.Matrix4().makeBasis(new THREE.Vector3(0, 0, -1), up, out));
+    glass.translate(0.28 + out.x * 0.012, 0.795 + out.y * 0.012, 0);
+    const mouth = new THREE.PlaneGeometry(0.66, 0.22).rotateY(Math.PI / 2).translate(1.046, 0.33, 0);
+    const ep = [], eu = [];
+    for (const [g0, v0] of [[glass, 0.5], [mouth, 0]]) {
+      const g = g0.toNonIndexed(), p = g.attributes.position.array, u = g.attributes.uv.array;
+      for (let i = 0; i < p.length; i++) ep.push(p[i]);
+      for (let i = 0; i < u.length; i += 2) eu.push(u[i], v0 + u[i + 1] * 0.5);
+    }
+    const eyes = new THREE.BufferGeometry();
+    eyes.setAttribute('position', new THREE.Float32BufferAttribute(ep, 3)); eyes.setAttribute('uv', new THREE.Float32BufferAttribute(eu, 2));
+    return { body, eyes };
+  })();
+  const crowdU = { uTime: { value: 0 }, uHype: { value: 0 }, uWave: { value: 0 }, uFocus: { value: new THREE.Vector3(0, -1e4, 0) } };
+  function crowdShader(sh) {
+    Object.assign(sh.uniforms, crowdU);
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', `#include <common>
+      uniform float uTime, uHype, uWave; uniform vec3 uFocus; attribute vec2 aCrowd;
+      vec3 crowdRel() { return uFocus - instanceMatrix[3].xyz; }
+      float crowdYaw() {   // obrót w stronę auta w kadrze (w układzie widza: przód = +x)
+        vec3 r = crowdRel(), l = vec3(dot(instanceMatrix[0].xyz, r), 0.0, dot(instanceMatrix[2].xyz, r));
+        return clamp(atan(-l.z, l.x), -1.1, 1.1) * smoothstep(260.0, 60.0, length(r));
+      }
+      vec3 crowdTurn(vec3 p, float a) { float c = cos(a), s = sin(a); return vec3(c * p.x + s * p.z, p.y, c * p.z - s * p.x); }
+      float crowdHop() {
+        float ph = aCrowd.x, near = smoothstep(170.0, 25.0, length(crowdRel()));
+        float hop = abs(sin(uTime * (6.0 + ph * 4.0) + ph * 40.0)) * (0.015 + 0.3 * near + 0.34 * uHype);
+        return hop + pow(max(0.0, sin(aCrowd.y * 0.05 - uTime * 2.6)), 14.0) * 0.6 * uWave;
+      }`)
+      .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\n objectNormal = crowdTurn(objectNormal, crowdYaw());')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\n transformed = crowdTurn(transformed, crowdYaw()); transformed.y += crowdHop();');
+  }
+  const crowdMat = {
+    body: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.15 }),
+    eyes: new THREE.MeshBasicMaterial({ map: T.eyes, alphaTest: 0.5 }),
+    flash: new THREE.PointsMaterial({ size: 2.2, map: T.smoke, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }),
+  };
+  crowdMat.body.onBeforeCompile = crowdMat.eyes.onBeforeCompile = crowdShader;
+  const CROWD_COL = ['#d7263d', '#f4c20d', '#1f4e9c', '#f1f1f1', '#ff7f11', '#3a7d44', '#6a4c93', '#0096c7', '#e76f9a', '#8ecae6', '#9acd32', '#2e2e33', '#c8a165', '#40c9a2'];
+  let crowdHype = 0;
+  const crowdKick = v => { crowdHype = Math.max(crowdHype, v); };
+  function buildCrowd(seats) {
+    const n = seats.length, group = new THREE.Group();
+    const bg = crowdGeo.body.clone(), eg = crowdGeo.eyes.clone(), data = new Float32Array(n * 2);
+    const body = new THREE.InstancedMesh(bg, crowdMat.body, n), eyes = new THREE.InstancedMesh(eg, crowdMat.eyes, n);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), sc = new THREE.Vector3(), col = new THREE.Color();
+    seats.forEach((st, i) => {
+      const k = 0.9 + Math.random() * 0.2;
+      m.compose(v.set(st.x, st.y, st.z), q.setFromEuler(e.set(0, st.yaw + (Math.random() - 0.5) * 0.3, 0)), sc.set(k, k, k));
+      body.setMatrixAt(i, m); eyes.setMatrixAt(i, m);
+      body.setColorAt(i, col.set(CROWD_COL[(Math.random() * CROWD_COL.length) | 0]).convertSRGBToLinear());
+      data[i * 2] = Math.random(); data[i * 2 + 1] = st.s;
+    });
+    const attr = new THREE.InstancedBufferAttribute(data, 2); bg.setAttribute('aCrowd', attr); eg.setAttribute('aCrowd', attr);
+    body.frustumCulled = eyes.frustumCulled = false;   // r128 liczy granice tylko z geometrii jednego widza
+    group.add(body, eyes);
+    // flesze aparatów: losowe miejsca na trybunach, częściej przy przejeżdżającym aucie i na mecie
+    const nf = Math.min(360, n), fpos = new Float32Array(nf * 3), fcol = new Float32Array(nf * 3), life = new Float32Array(nf);
+    for (let i = 0; i < nf; i++) { const st = seats[(Math.random() * n) | 0]; fpos[i * 3] = st.x; fpos[i * 3 + 1] = st.y + 1.3; fpos[i * 3 + 2] = st.z; }
+    const fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.BufferAttribute(fpos, 3)); fg.setAttribute('color', new THREE.BufferAttribute(fcol, 3));
+    const flash = new THREE.Points(fg, crowdMat.flash); flash.frustumCulled = false; group.add(flash);
+    return { group, flash: { pos: fpos, col: fcol, life, attr: fg.attributes.color } };
+  }
+  // sterowiec krążący nad torem
+  const blimp = (() => {
+    const g = new THREE.Group(), hull = new THREE.SphereGeometry(1, 28, 16); hull.rotateZ(Math.PI / 2); hull.scale(22, 6.5, 6.5);
+    const std = (color, o) => new THREE.MeshStandardMaterial(Object.assign({ color, roughness: 0.55, metalness: 0.2 }, o));
+    g.add(new THREE.Mesh(hull, std(0xc9ccd1)));
+    const fin = std(0xf4c20d);
+    for (let i = 0; i < 4; i++) { const f = new THREE.Mesh(new THREE.BoxGeometry(6, 0.3, 5).translate(0, 0, 4.2), fin); f.position.x = -18.5; f.rotation.x = i * Math.PI / 2; g.add(f); }
+    const gon = new THREE.Mesh(new THREE.BoxGeometry(5, 1.6, 1.8), std(0x2e2e33)); gon.position.set(2, -6.8, 0); g.add(gon);
+    // napis rysowany przy pierwszej klatce (updateCrowd) — wtedy czcionka jest już wczytana
+    const lm = new THREE.MeshBasicMaterial({ color: 0x16244a });
+    // pas z napisem dopasowany do elipsoidy kadłuba (półosie 22 / 6.5)
+    const band = new THREE.PlaneGeometry(19, 3.6, 24, 4), bp = band.attributes.position;
+    for (let i = 0; i < bp.count; i++) { const x = bp.getX(i), y = bp.getY(i) + 0.4; bp.setY(i, y); bp.setZ(i, Math.sqrt(Math.max(0, 42.25 * (1 - x * x / 484) - y * y)) + 0.06); }
+    band.computeVertexNormals();
+    for (const sz of [-1, 1]) { const p = new THREE.Mesh(band, lm); if (sz < 0) p.rotation.y = Math.PI; g.add(p); }
+    g.visible = false; scene.add(g);
+    return { g, lm, a: Math.random() * 7 };
+  })();
+  function updateCrowd(dt) {
+    if (!world) return;
+    const tr = world.track, B = tr.bounds;
+    crowdU.uTime.value += dt;
+    // doping: po szachownicy i na podium szaleją, przy zdarzeniach (start, kraksa) wybuchają na chwilę
+    const tgt = pod ? 1 : race && race.phase === 'checkered' ? 0.9 : 0;
+    crowdHype = Math.max(tgt, crowdHype - dt * 0.3);
+    crowdU.uHype.value = crowdHype;
+    const waveOn = state === 'menu' || (race && race.phase === 'pace');
+    crowdU.uWave.value += ((waveOn ? 1 : 0) - crowdU.uWave.value) * Math.min(1, dt * 0.8);
+    const fp = crowdU.uFocus.value;
+    if (pod) fp.copy(pod.center); else if (focus) fp.set(focus.x, 0, -focus.y); else fp.set(0, -1e4, 0);
+    const F = world.crowd.flash, rateBase = 0.02 + crowdHype * 0.9;
+    for (let i = 0; i < F.life.length; i++) {
+      let l = F.life[i];
+      if (l > 0) l = Math.max(0, l - dt * 9);
+      else {
+        const dx = F.pos[i * 3] - fp.x, dz = F.pos[i * 3 + 2] - fp.z, near = clamp(1 - Math.sqrt(dx * dx + dz * dz) / 150, 0, 1);
+        if (Math.random() < (rateBase + near * near * 1.6) * dt) l = 1;
+      }
+      F.life[i] = l; const b = l * l * 1.4;
+      F.col[i * 3] = b; F.col[i * 3 + 1] = b * 0.97; F.col[i * 3 + 2] = b * 0.9;
+    }
+    F.attr.needsUpdate = true;
+    // sterowiec
+    const cx = (B.x0 + B.x1) / 2, cz = -(B.y0 + B.y1) / 2, R = Math.max(B.x1 - B.x0, B.y1 - B.y0) * 0.32 + 90;
+    blimp.a += dt * 9 / R;
+    const g = blimp.g; g.visible = true;
+    if (!blimp.lm.map) {
+      blimp.lm.map = tex(1024, 192, (c, w, h) => {
+        c.fillStyle = '#16244a'; c.fillRect(0, 0, w, h); c.fillStyle = '#f4c20d'; c.fillRect(0, 10, w, 8); c.fillRect(0, h - 18, w, 8);
+        c.font = '800 128px "Saira Condensed", sans-serif'; c.textBaseline = 'middle';
+        const a = 'SLIPSTREAM ', wa = c.measureText(a).width, x = (w - wa - c.measureText('500').width) / 2;
+        c.fillStyle = '#f4c20d'; c.fillText(a, x, h / 2 + 6); c.fillStyle = '#f4f1e8'; c.fillText('500', x + wa, h / 2 + 6);
+      });
+      blimp.lm.color.set(0xffffff); blimp.lm.needsUpdate = true;
+    }
+    g.position.set(cx + Math.cos(blimp.a) * R, 125 + Math.sin(blimp.a * 3) * 2, cz + Math.sin(blimp.a) * R);
+    g.rotation.set(0, Math.atan2(-Math.cos(blimp.a), -Math.sin(blimp.a)), 0);
   }
 
   // ─── modele aut ───
   const sponsor = ['KOMETA', 'BORSUK OIL', 'VOLTA', 'ZEFIR', 'OKTAN+', 'NORDA', 'KRUK', 'PIASEK', 'MOTYL', 'ORKAN'];
+  // Nadwozia różnią się tylko wyglądem — osiągi są wyrównane jak w NASCAR. Profil boczny: nos pionowo do (2.64, nose), łuk curve
+  // do początku maski, dalej punkty top aż do tyłu. Kabina (szkło): dół [y, x tył, x przód, pół-szerokość] i góra tak samo.
+  // hood: [x, y, pochylenie] napisu na masce; lamp: [y, obrót] reflektorów; grille: [y, wysokość].
+  const MODELS = {
+    sedan: { nose: 0.5, curve: [2.55, 0.72, 2.1, 0.78], top: [[0.8, 0.88], [-2.3, 0.95], [-2.64, 0.99]],
+      cabLo: [0.86, -2.28, 0.9, 0.8], cabHi: [1.245, -1.34, -0.2, 0.62], hood: [1.45, 0.9, -0.074], lamp: [0.6, 0.5], grille: [0.36, 0.2], door: 0.55, wing: 1.1 },
+    fastback: { nose: 0.58, curve: [2.62, 0.76, 2.4, 0.82], top: [[0.55, 0.93], [-2.4, 0.99], [-2.64, 1.0]],
+      cabLo: [0.92, -2.5, 0.55, 0.8], cabHi: [1.21, -1.12, -0.3, 0.6], hood: [1.5, 0.944, -0.059], lamp: [0.67, 0.5], grille: [0.4, 0.24], door: 0.57, wing: 1.11 },
+    coupe: { nose: 0.42, curve: [2.5, 0.68, 1.95, 0.74], top: [[0.75, 0.86], [-2.25, 0.96], [-2.64, 1.03]],
+      cabLo: [0.84, -2.15, 0.8, 0.8], cabHi: [1.17, -1.3, -0.35, 0.58], hood: [1.35, 0.87, -0.0997], lamp: [0.52, 0.6], grille: [0.3, 0.16], door: 0.53, wing: 1.14 },
+    pickup: { nose: 0.8, curve: [2.62, 0.96, 2.4, 0.99], top: [[0.9, 1.04], [-2.64, 1.06]],
+      cabLo: [1.0, -0.95, 0.9, 0.84], cabHi: [1.58, -0.9, 0.2, 0.74], hood: [1.7, 1.08, -0.034], lamp: [0.72, 0.1], grille: [0.46, 0.34], door: 0.62, wing: 1.2, bed: true },
+  };
+  const modelOf = car => MODELS[car.model] ? car.model : 'sedan';
   const carGeo = (() => {
-    const lo = new THREE.Shape();
-    lo.moveTo(2.64, 0.22); lo.lineTo(2.64, 0.5); lo.quadraticCurveTo(2.55, 0.72, 2.1, 0.78); lo.lineTo(0.8, 0.88); lo.lineTo(-2.3, 0.95); lo.lineTo(-2.64, 0.99); lo.lineTo(-2.64, 0.24); lo.lineTo(-2.3, 0.2); lo.lineTo(2.3, 0.18); lo.closePath();
+    const wheel = new THREE.CylinderGeometry(0.34, 0.34, 0.3, 20); wheel.rotateX(Math.PI / 2);
+    const rim = new THREE.CylinderGeometry(0.2, 0.2, 0.31, 12); rim.rotateX(Math.PI / 2);
+    return { wheel, rim, bolt: new THREE.BoxGeometry(0.3, 0.05, 0.32), bar: new THREE.BoxGeometry(0.03, 1, 1), box: new THREE.BoxGeometry(1, 1, 1),
+      spoiler: new THREE.BoxGeometry(0.04, 0.24, 1.86), splitter: new THREE.BoxGeometry(0.45, 0.04, 1.94), plane: new THREE.PlaneGeometry(1, 1), light: new THREE.BoxGeometry(0.05, 0.08, 0.34) };
+  })();
+  const bodyGeo = {};   // bryła i szyby każdego modelu — budowane przy pierwszym użyciu
+  function bodyFor(id) {
+    if (bodyGeo[id]) return bodyGeo[id];
+    const M = MODELS[id], lo = new THREE.Shape();
+    lo.moveTo(2.64, 0.22); lo.lineTo(2.64, M.nose); lo.quadraticCurveTo(...M.curve);
+    for (const [x, y] of M.top) lo.lineTo(x, y);
+    lo.lineTo(-2.64, 0.24); lo.lineTo(-2.3, 0.2); lo.lineTo(2.3, 0.18); lo.closePath();
     const lower = new THREE.ExtrudeGeometry(lo, { depth: 1.8, bevelEnabled: true, bevelThickness: 0.07, bevelSize: 0.06, bevelSegments: 2 });
     lower.translate(0, 0, -0.9);
     // kabina zwężająca się ku górze (tumblehome): prostopadłościan z przesuniętymi wierzchołkami
     const glass = new THREE.BoxGeometry(1, 1, 1), gp = glass.attributes.position;
     for (let i = 0; i < gp.count; i++) {
-      const sx = Math.sign(gp.getX(i)), sy = Math.sign(gp.getY(i)), sz = Math.sign(gp.getZ(i));
-      if (sy < 0) gp.setXYZ(i, sx > 0 ? 0.9 : -2.28, 0.86, sz * 0.8);
-      else gp.setXYZ(i, sx > 0 ? -0.2 : -1.34, 1.245, sz * 0.62);
+      const [y, x0, x1, hz] = gp.getY(i) < 0 ? M.cabLo : M.cabHi;
+      gp.setXYZ(i, gp.getX(i) > 0 ? x1 : x0, y, Math.sign(gp.getZ(i)) * hz);
     }
     glass.computeVertexNormals();
-    const wheel = new THREE.CylinderGeometry(0.34, 0.34, 0.3, 20); wheel.rotateX(Math.PI / 2);
-    const rim = new THREE.CylinderGeometry(0.2, 0.2, 0.31, 12); rim.rotateX(Math.PI / 2);
-    return { lower, glass, wheel, rim, roof: new THREE.BoxGeometry(1.12, 0.03, 1.22), bar: new THREE.BoxGeometry(0.03, 1, 1), spoiler: new THREE.BoxGeometry(0.04, 0.24, 1.86), splitter: new THREE.BoxGeometry(0.45, 0.04, 1.94), plane: new THREE.PlaneGeometry(1, 1), light: new THREE.BoxGeometry(0.05, 0.08, 0.34) };
-  })();
+    const [ty, tx0, tx1, tz] = M.cabHi;
+    return (bodyGeo[id] = { lower, glass, roof: new THREE.BoxGeometry(tx1 - tx0 - 0.02, 0.03, 2 * tz - 0.02), roofX: (tx0 + tx1) / 2, roofY: ty + 0.01, roofN: Math.min(1, tx1 - tx0 - 0.1) });
+  }
   const matTire = new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.85 });
   const matDark = new THREE.MeshStandardMaterial({ color: 0x121316, roughness: 0.7 });
   const matGlass = new THREE.MeshStandardMaterial({ color: 0x0c1118, roughness: 0.12, metalness: 0.7 });
@@ -847,26 +1134,36 @@
       g.lineWidth = 12; g.strokeStyle = stroke; g.strokeText(String(num), 0, 0); g.fillStyle = fg; g.fillText(String(num), 0, 0); g.restore();
     });
   }
-  function buildCar(car, i) {
+  // auto bez dodawania do sceny (wyścig i podgląd w menu); materiały z userData.own należą tylko do tego auta
+  function makeCar(car, i) {
+    const M = MODELS[modelOf(car)], B = bodyFor(modelOf(car));
     const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
     const lin = h => new THREE.Color(h).convertSRGBToLinear();
-    const paint = new THREE.MeshStandardMaterial({ color: lin(car.color), metalness: 0.35, roughness: 0.3 });
-    const trim = new THREE.MeshStandardMaterial({ color: lin(car.color2), metalness: 0.2, roughness: 0.5 });
+    const own = m => { m.userData.own = true; return m; };
+    const decal = (map, roughness) => own(new THREE.MeshStandardMaterial({ map, roughness, polygonOffset: true, polygonOffsetFactor: -2 }));
+    const paint = own(new THREE.MeshStandardMaterial({ color: lin(car.color), metalness: 0.35, roughness: 0.3 }));
+    const trim = own(new THREE.MeshStandardMaterial({ color: lin(car.color2), metalness: 0.2, roughness: 0.5 }));
     const add = (geo, mat, x, y, z, shadow = true) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = shadow; body.add(m); return m; };
-    add(carGeo.lower, paint, 0, 0, 0);
-    add(carGeo.glass, matGlass, 0, 0, 0);
-    add(carGeo.roof, paint, -0.77, 1.255, 0);
-    const sp = add(carGeo.spoiler, trim, -2.6, 1.1, 0); sp.rotation.z = -0.35;
+    add(B.lower, paint, 0, 0, 0);
+    add(B.glass, matGlass, 0, 0, 0);
+    add(B.roof, paint, B.roofX, B.roofY, 0);
+    if (M.bed) {   // pickup: tylna ściana kabiny, zakryta skrzynka i burty w kolorze auta
+      add(carGeo.box, paint, -0.93, 1.28, 0).scale.set(0.08, 0.48, 1.5);
+      add(carGeo.box, matDark, -1.8, 1.12, 0).scale.set(1.62, 0.04, 1.62);
+      for (const z of [-0.87, 0.87]) add(carGeo.box, paint, -1.8, 1.16, z).scale.set(1.66, 0.12, 0.08);
+    }
+    const sp = add(carGeo.spoiler, trim, -2.6, M.wing, 0); sp.rotation.z = -0.35;
     add(carGeo.splitter, matDark, 2.52, 0.12, 0);
-    const tail = add(carGeo.bar, matTail, -2.715, 0.82, 0, false); tail.scale.set(1, 0.09, 1.55);          // pełnoszeroka listwa świateł
-    const diff = add(carGeo.bar, matDark, -2.715, 0.36, 0, false); diff.scale.set(1, 0.24, 1.7);           // dyfuzor
-    const grille = add(carGeo.bar, matDark, 2.715, 0.36, 0, false); grille.scale.set(1, 0.2, 1.5);
-    for (const z of [-0.56, 0.56]) { const hl = add(carGeo.bar, matLamp, 2.7, 0.6, z, false); hl.scale.set(1, 0.1, 0.42); hl.rotation.z = 0.5; }
-    const door = new THREE.MeshStandardMaterial({ map: numTex(car.number, car.color2, car.color, '#111', true), roughness: 0.4, polygonOffset: true, polygonOffsetFactor: -2 });
-    const dR = add(carGeo.plane, door, -0.15, 0.55, 0.972, false); dR.scale.set(1.7, 0.7, 1);
-    const dL = add(carGeo.plane, door, -0.15, 0.55, -0.972, false); dL.scale.set(1.7, 0.7, 1); dL.rotation.y = Math.PI;
-    const roofN = add(carGeo.plane, new THREE.MeshStandardMaterial({ map: numTex(car.number, '#111', '#f4f1e8', '#f4f1e8'), roughness: 0.5, polygonOffset: true, polygonOffsetFactor: -2 }), -0.77, 1.273, 0, false);
-    roofN.scale.set(1.0, 1.0, 1); roofN.rotation.x = -Math.PI / 2; roofN.rotation.z = -Math.PI / 2;
+    const rearY = M.top[M.top.length - 1][1];
+    const tail = add(carGeo.bar, matTail, -2.715, rearY - 0.17, 0, false); tail.scale.set(1, 0.09, 1.55);   // pełnoszeroka listwa świateł
+    const diff = add(carGeo.bar, matDark, -2.715, 0.36, 0, false); diff.scale.set(1, 0.24, 1.7);             // dyfuzor
+    const grille = add(carGeo.bar, matDark, 2.715, M.grille[0], 0, false); grille.scale.set(1, M.grille[1], 1.5);
+    for (const z of [-0.56, 0.56]) { const hl = add(carGeo.bar, matLamp, 2.7, M.lamp[0], z, false); hl.scale.set(1, 0.1, 0.42); hl.rotation.z = M.lamp[1]; }
+    const door = decal(numTex(car.number, car.color2, car.color, '#111', true), 0.4);
+    const dR = add(carGeo.plane, door, -0.15, M.door, 0.972, false); dR.scale.set(1.7, 0.7, 1);
+    const dL = add(carGeo.plane, door, -0.15, M.door, -0.972, false); dL.scale.set(1.7, 0.7, 1); dL.rotation.y = Math.PI;
+    const roofN = add(carGeo.plane, decal(numTex(car.number, '#111', '#f4f1e8', '#f4f1e8'), 0.5), B.roofX, B.roofY + 0.018, 0, false);
+    roofN.scale.set(B.roofN, B.roofN, 1); roofN.rotation.x = -Math.PI / 2; roofN.rotation.z = -Math.PI / 2;
     const hoodTxt = car.netId != null ? car.name.toUpperCase() : car.isPlayer ? 'SLIPSTREAM' : sponsor[i % sponsor.length];
     const hoodT = tex(512, 160, (g, w, h) => {
       g.fillStyle = car.color2; g.fillRect(0, 0, w, h); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = car.color;
@@ -874,22 +1171,61 @@
       if (tw > w - 24) g.font = `800 ${Math.floor(104 * (w - 24) / tw)}px "Saira Condensed", sans-serif`;
       g.fillText(hoodTxt, w / 2, h / 2 + 6);
     });
-    const hood = add(carGeo.plane, new THREE.MeshStandardMaterial({ map: hoodT, roughness: 0.45, polygonOffset: true, polygonOffsetFactor: -2 }), 1.45, 0.9, 0, false);
+    const [hx, hy, tilt] = M.hood;
+    const hood = add(carGeo.plane, decal(hoodT, 0.45), hx, hy, 0, false);
     hood.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0)));
-    hood.rotateOnWorldAxis(new THREE.Vector3(0, 0, 1), -0.074); hood.scale.set(1.5, 0.47, 1);
+    hood.rotateOnWorldAxis(new THREE.Vector3(0, 0, 1), tilt); hood.scale.set(1.5, 0.47, 1);
     const wheels = [];
     for (const [x, z, front] of [[1.36, 0.82, 1], [1.36, -0.82, 1], [-1.43, 0.82, 0], [-1.43, -0.82, 0]]) {
       const piv = new THREE.Group(); piv.position.set(x, 0.34, z); root.add(piv);
       const spin = new THREE.Group(); piv.add(spin);
       const t = new THREE.Mesh(carGeo.wheel, matTire); t.castShadow = true; spin.add(t);
       const r = new THREE.Mesh(carGeo.rim, trim); spin.add(r);
-      const bolt = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.05, 0.32), matDark); spin.add(bolt);
+      const bolt = new THREE.Mesh(carGeo.bolt, matDark); spin.add(bolt);
       wheels.push({ piv, spin, front });
     }
     root.traverse(o => { if (o.isMesh) o.receiveShadow = false; });
-    scene.add(root);
     return { root, body, wheels, spinA: 0, car };
   }
+  function buildCar(car, i) { const v = makeCar(car, i); scene.add(v.root); return v; }
+  function disposeCar(root) {
+    const seen = new Set();
+    root.traverse(o => { const m = o.material; if (m && m.userData.own && !seen.has(m)) { seen.add(m); if (m.map) m.map.dispose(); m.dispose(); } });
+  }
+
+  // ─── podgląd auta w menu: osobny mały renderer, auto powoli się obraca ───
+  garage = (() => {
+    const cv = $('#carPrev');
+    let r;
+    try { r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true }); } catch (e) { cv.hidden = true; return null; }
+    r.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    r.outputEncoding = THREE.sRGBEncoding; r.toneMapping = THREE.ACESFilmicToneMapping;
+    const sc = new THREE.Scene(), cam = new THREE.PerspectiveCamera(31, 4 / 3, 0.1, 50);
+    sc.add(new THREE.HemisphereLight(0xdfe8ff, 0x3a3430, 0.95));
+    const key = new THREE.DirectionalLight(0xffe2c0, 1.6); key.position.set(4, 6, 5); sc.add(key);
+    const back = new THREE.DirectionalLight(0x9fc4ff, 0.8); back.position.set(-5, 3, -4); sc.add(back);
+    // miękki cień pod autem (tło daje sam canvas)
+    const blob = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0, map: T.smoke, transparent: true, opacity: 0.85, depthWrite: false }));
+    blob.rotation.x = -Math.PI / 2; blob.position.y = 0.01; blob.scale.set(6.6, 2.9, 1);
+    const turn = new THREE.Group(); turn.add(blob); sc.add(turn);
+    cam.position.set(6.3, 2.8, 6.3); cam.lookAt(0, 0.45, 0);
+    let v = null, want = null, key0 = '', ang = 0.5, cw = 0, ch = 0;
+    return {
+      set(car) { const k = JSON.stringify(car); if (k !== key0) { key0 = k; want = Object.assign({}, car); } },
+      draw(dt) {
+        const w = cv.clientWidth, h = cv.clientHeight;
+        if (!w || !h) return;   // menu schowane
+        if (w !== cw || h !== ch) { cw = w; ch = h; r.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); }
+        if (want) {   // przebudowa dopiero przy rysowaniu — przeciąganie po palecie kolorów nie tworzy auta co zdarzenie
+          if (v) { turn.remove(v.root); disposeCar(v.root); }
+          v = makeCar(Object.assign({ name: 'TY', isPlayer: true }, want), 0); turn.add(v.root); want = null;
+        }
+        ang += dt * 0.45; turn.rotation.y = ang;
+        r.render(sc, cam);
+      },
+    };
+  })();
+  carChanged();
 
   // ─── ekipy w boksach: czterech mechaników w barwach auta i tablica z numerem na murku ───
   let crews = [];
@@ -1238,7 +1574,7 @@
       st(this.gr.g.gain, c.surface === 'grass' ? Math.min(0.55, sp / 55) : 0, 0.06); st(this.gr.bump.frequency, 3 + sp * 0.35, 0.1);
       // publiczność: cicho na całym torze, głośniej przy linii start/meta, najgłośniej po fladze w szachownicę
       const L = tr.len || 0, s = L ? Sim.mod(c.s || 0, L) : 0, near = L ? clamp(1 - Math.min(s, L - s) / 320, 0, 1) : 0;
-      st(this.crowd.g.gain, 0.1 + near * 0.22 + (race.phase === 'checkered' ? 0.12 : 0), 0.6);
+      st(this.crowd.g.gain, 0.1 + near * 0.22 + (race.phase === 'checkered' ? 0.12 : 0) + crowdHype * 0.12, 0.6);
       // rywale: 4 najbliższe auta; głos trzyma swoje auto, dopóki jest w czwórce (bez przeskoków wysokości)
       const cand = [];
       for (const o of race.cars) { if (o === c || o.status === 'out') continue; const d = Math.hypot(o.x - c.x, o.y - c.y); if (d < 260) cand.push({ o, d }); }
@@ -1367,7 +1703,7 @@
 
   function newRace(opt) {
     podiumEnd();
-    for (const v of visuals) { scene.remove(v.root); v.root.traverse(o => { if (o.material && o.material.map && o.material.map !== T.smoke) o.material.map.dispose(); }); }
+    for (const v of visuals) { scene.remove(v.root); disposeCar(v.root); }
     for (const cr of crews) { scene.remove(cr.g); cr.sign.material.map.dispose(); }
     const r = new Sim.Race(opt);
     if (!world || world.track.id !== r.track.id) buildWorld(r.track);
@@ -1385,7 +1721,7 @@
   function startRace(netOpt) {
     audio.init(); audio.resume();
     const opt = netOpt ? Object.assign({}, netOpt, { localId: net.myId, replica: net.mode === 'guest' })
-      : { track: cfg.track, laps: LAPS[cfg.track][cfg.len], difficulty: +cfg.difficulty, damage: cfg.damage, tires: cfg.tires, grid: +cfg.grid, assists: !!cfg.assists };
+      : { track: cfg.track, laps: LAPS[cfg.track][cfg.len], difficulty: +cfg.difficulty, damage: cfg.damage, tires: cfg.tires, grid: +cfg.grid, assists: !!cfg.assists, player: cleanCar(cfg.car) };
     race = newRace(opt);
     attract = null; state = 'race'; paused = false; skipping = false; focus = race.player; snapCam = true;
     input.steer = 0; input.thr = 0; input.brk = 0;
@@ -1465,14 +1801,15 @@
     for (const e of race.events.splice(0)) {   // lista czyszczona od razu — błąd w jednym zdarzeniu nie wraca w każdej klatce
       const me = !!e.car && e.car === race.player;
       switch (e.type) {
-        case 'green': if (state === 'race') showBanner('Zielona flaga!', 'green', 'Gaz do dechy', 2.4); break;
+        case 'green': crowdKick(0.8); if (state === 'race') showBanner('Zielona flaga!', 'green', 'Gaz do dechy', 2.4); break;
         case 'white': if (state === 'race') showBanner('Ostatnie okrążenie', 'white', null, 2.6); break;
-        case 'checkered': if (state === 'race') showBanner('Szachownica', 'check', `Wygrywa ${who(e.car)}`, 3.2); break;
+        case 'checkered': crowdKick(1); if (state === 'race') showBanner('Szachownica', 'check', `Wygrywa ${who(e.car)}`, 3.2); break;
         case 'finish': if (me) showBanner(`Meta — P${e.car.finishPos}`, e.car.finishPos === 1 ? 'yellow' : 'dark', e.car.finishPos === 1 ? 'Zwycięstwo!' : `Najlepsze okrążenie ${fmtT(e.car.bestLap)}`, 4); break;
         case 'dnf': if (state === 'race') { feed(`${who(e.car)} — ${e.why}`, 'bad'); if (me) showBanner('Koniec wyścigu', 'red', `${e.why}. Oglądasz dalej — P w menu pauzy, żeby przewinąć do mety.`, 5); } break;
         case 'flat': if (state === 'race') { feed(`${who(e.car)} — przebita opona`, 'bad'); if (me) showBanner('Przebita opona!', 'red', 'Auto ślizga się na tej osi — uważaj w zakrętach', 3); } break;
         case 'wall': {
           const last = wallFeedT.get(e.car) || -9;
+          if (e.v > 14) crowdKick(0.55);
           if (race.t - last > 4 && e.v > 7 && state === 'race') { feed(`${who(e.car)} w ścianie`, me ? 'bad' : ''); wallFeedT.set(e.car, race.t); }
           if (visFor(e.car)) { const p = visFor(e.car).root.position; spark(p, new THREE.Vector3(e.car.vx, 0, -e.car.vy), 30); }
           if (focus && (e.car === focus || dist2(e.car, focus) < 900)) audio.bang(e.v);
@@ -1541,9 +1878,16 @@
   }
 
   // ─── kamera ───
-  let snapCam = true;
+  let snapCam = true, lookingBack = false;
+  // widok do tyłu: trzymany Q, LB na padzie albo przycisk TYŁ na ekranie dotykowym
+  function lookBackHeld() {
+    if (state !== 'race' || !race.player || race.player.status === 'out' || focus !== race.player) return false;
+    const pad = navigator.getGamepads ? Array.from(navigator.getGamepads()).find(Boolean) : null;
+    return !!(keys.KeyQ || input.touch.back || (pad && pad.buttons[4] && pad.buttons[4].pressed));
+  }
   function updateCamera(dt) {
-    const tr = race.track;
+    const tr = race.track, back = lookBackHeld();
+    if (back !== lookingBack) { lookingBack = back; snapCam = true; $('#lookTag').hidden = !back; }
     if (state === 'menu' || !focus || focus.status === 'out' || (race.player && race.player.status === 'out')) {
       // transmisja: przełączaj się między autami w stawce
       tvFocusT -= dt;
@@ -1557,14 +1901,16 @@
       return tvCam(dt, state === 'menu' ? 3 : 3);
     }
     const mode = camMode;
-    if (mode === 3) return tvCam(dt, 3);
-    const c = focus, { h } = carBasis(c);
+    if (mode === 3 && !back) return tvCam(dt, 3);
+    const c = focus, { h } = carBasis(c), snap = snapCam;
     const P = new THREE.Vector3(c.x, h, -c.y);
     let pos, look, k, fov;
-    if (mode === 0) { pos = P.clone().addScaledVector(_f, -7.4).addScaledVector(_n, 2.4); look = P.clone().addScaledVector(_f, 5).addScaledVector(_n, 1.0); k = 9; fov = 60; }
+    if (back && mode === 2) { pos = P.clone().addScaledVector(_f, 0.3).addScaledVector(_n, 1.6); look = P.clone().addScaledVector(_f, -40).addScaledVector(_n, 0.9); k = 60; fov = 74; }
+    else if (back) { pos = P.clone().addScaledVector(_f, 3.2).addScaledVector(_n, 3.1); look = P.clone().addScaledVector(_f, -26).addScaledVector(_n, 0.4); k = 14; fov = 64; }
+    else if (mode === 0) { pos = P.clone().addScaledVector(_f, -7.4).addScaledVector(_n, 2.4); look = P.clone().addScaledVector(_f, 5).addScaledVector(_n, 1.0); k = 9; fov = 60; }
     else if (mode === 1) { pos = P.clone().addScaledVector(_f, -13.5).addScaledVector(_n, 4.6); look = P.clone().addScaledVector(_f, 9).addScaledVector(_n, 1.2); k = 7; fov = 56; }
     else { pos = P.clone().addScaledVector(_f, -0.5).addScaledVector(_n, 1.55); look = P.clone().addScaledVector(_f, 40).addScaledVector(_n, 0.9); k = 60; fov = 74; }
-    fov += clamp(c.speed - 40, 0, 50) * 0.16;
+    if (!back) fov += clamp(c.speed - 40, 0, 50) * 0.16;
     const a = snapCam ? 1 : 1 - Math.exp(-dt * k);
     camPos.lerp(pos, a); camLook.lerp(look, snapCam ? 1 : 1 - Math.exp(-dt * k * 1.4)); camUp.lerp(_n, snapCam ? 1 : 1 - Math.exp(-dt * 4)).normalize();
     snapCam = false;
@@ -1572,7 +1918,7 @@
     const shake = c.hit * 0.25 + (c.speed > 70 ? (c.speed - 70) * 0.002 : 0) + (c.surface === 'grass' ? 0.06 : 0);
     camera.position.copy(camPos).add(new THREE.Vector3((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake));
     camera.up.copy(camUp); camera.lookAt(camLook);
-    if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = lerp(camera.fov, fov, 1 - Math.exp(-dt * 3)); camera.updateProjectionMatrix(); }
+    if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = snap ? fov : lerp(camera.fov, fov, 1 - Math.exp(-dt * 3)); camera.updateProjectionMatrix(); }
   }
   function tvCam(dt) {
     const tr = race.track, c = focus, { h } = carBasis(c);
@@ -2024,6 +2370,17 @@
   const rndId = n => { let s = ''; for (let i = 0; i < n; i++) s += 'abcdefghijkmnpqrstuvwxyz23456789'[Math.floor(Math.random() * 32)]; return s; };
   const cleanName = n => String(n || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 14) || 'Gracz';
   const myName = () => cleanName(cfg.name || (net.mode === 'host' ? 'Gospodarz' : 'Gracz'));
+  // wygląd gracza w pokoju: to, o co prosi (po sprawdzeniu), a gdy numer ma już ktoś inny — następny wolny
+  function assignCar(p, want) {
+    const used = n => net.players.some(q => q !== p && q.number === n);
+    const free = Object.assign({ model: 'sedan' }, LIVERY.find(l => !used(l.number)) || LIVERY[0]);
+    const c = want ? cleanCar(want, free) : free;
+    let n = c.number;
+    while (used(n)) n = (n + 1) % 100;
+    Object.assign(p, c, { number: n });
+  }
+  // barwy od gospodarza też trafiają do HTML — tylko #rrggbb
+  const safeCar = c => Object.assign(c, cleanCar(c, { number: 0, color: '#8d99ae', color2: '#101012', model: 'sedan' }));
   const plural = n => n === 1 ? 'gracz' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'gracze' : 'graczy';
   const viaName = (v, turn) => v === 'relay' ? 'przekaźnik' : turn ? 'P2P · TURN' : 'P2P';
   Object.assign(net, { seq: 0, inputs: [], predAcc: 0, predicting: false, evIn: [], sendT: 0, pingT: 0, lobbyT: 0, hostT: 0, hostArr: null, rtt0: false, rtts: [],
@@ -2141,6 +2498,8 @@
       `<span class="ping">${!p.host && p.rtt != null ? Math.round(p.rtt * 1000) + ' ms' : ''}${!p.host && p.via ? `<small>${p.nrtt != null ? `sieć ${Math.round(p.nrtt * 1000)} ms · ` : ''}${viaName(p.via, p.turn)}</small>` : ''}</span></li>`).join('');
     const n = net.players.length;
     if (net.mode === 'host') {
+      const me = net.players.find(p => p.host);
+      if (me && state === 'menu') assignCar(me, cfg.car);
       $('#netNote').textContent = `Znajomi wpisują kod ${net.code} w polu „Dołącz” (muszą mieć tę samą wersję gry). Stawka: ${n} ${plural(n)}` +
         `${cfg.netAi === 'fill' && n < 10 ? ` + ${10 - n} AI` : ''}. Tor i ustawienia wybierasz powyżej.`;
       hostLobbyBroadcast();
@@ -2148,7 +2507,11 @@
       const s = net.settings;
       $('#netNote').textContent = !s ? 'Łączenie z gospodarzem…' : `Ustawienia gospodarza: ${Sim.TRACKS[s.track].name} · ${s.laps} okr. · AI ${s.difficulty}/11 · opony: ${(TIRES[s.tires] || TIRES.normal).toLowerCase()} · fizyka uszkodzeń: ${DAMAGE[s.damage].name.toLowerCase()} · ${s.ai === 'fill' ? 'stawka 10 aut' : 'bez AI'}.` +
         (net.racing ? ' Trwa wyścig — pojedziesz w następnym.' : ' Start uruchamia gospodarz.');
-      if (net.host && net.host.open && net.sentAssists !== !!cfg.assists) { net.sentAssists = !!cfg.assists; netSend({ t: 'set', assists: !!cfg.assists }); }
+      const car = JSON.stringify(cleanCar(cfg.car));
+      if (net.host && net.host.open && (net.sentAssists !== !!cfg.assists || net.sentCar !== car)) {
+        Object.assign(net, { sentAssists: !!cfg.assists, sentCar: car });
+        netSend({ t: 'set', assists: !!cfg.assists, car: cleanCar(cfg.car) });
+      }
     }
   }
 
@@ -2168,7 +2531,7 @@
     const peer = net.peer, host = net.host, guests = [...net.guests.values()], relay = net.relay, j = net.join;
     if (j) j.tm.forEach(clearTimeout);
     upStop(); clearTimeout(net.upT);
-    Object.assign(net, { mode: null, peer: null, code: null, myId: null, players: [], host: null, settings: null, racing: false, sentAssists: null, predicting: false,
+    Object.assign(net, { mode: null, peer: null, code: null, myId: null, players: [], host: null, settings: null, racing: false, sentAssists: null, sentCar: null, predicting: false,
       join: null, hs: null, relay: [] });
     net.guests.clear(); net.rconns.clear();
     try { if (host) host.close(); } catch (e) { /* już zamknięte */ }
@@ -2234,7 +2597,8 @@
     if (!net.mode) {
       if (!p2p && !(relay && h.p2p !== 'wait')) { if (h.p2p !== 'wait' && h.relay !== 'wait') netFail({ type: h.p2p === 'taken' ? 'unavailable-id' : 'offline' }); return; }
       Object.assign(net, { mode: 'host', code: h.code, myId: 'host' });
-      net.players = [Object.assign({ id: 'host', name: myName(), host: true }, LIVERY[0])];
+      net.players = [{ id: 'host', name: myName(), host: true }];
+      assignCar(net.players[0], cfg.car);
       renderNet();
     }
     netStatus(p2p ? (relay ? 'pokój otwarty · P2P + przekaźnik' : h.relay === 'wait' ? 'pokój otwarty' : 'pokój otwarty · tylko P2P')
@@ -2280,8 +2644,8 @@
       const bye = why => { conn.send({ t: 'bye', why }); setTimeout(() => conn.close(), 500); };
       if (m.v !== PROTO) return bye('Inna wersja gry niż u gospodarza — odśwież stronę');
       if (net.players.length >= MAXP) return bye('Pokój jest pełny');
-      const liv = LIVERY.find(l => !net.players.some(p => p.number === l.number));
-      const p = Object.assign({ id: conn.peer, name: cleanName(m.name), host: false, assists: m.assists !== false, rtt: null, via: conn.kind }, liv);
+      const p = { id: conn.peer, name: cleanName(m.name), host: false, assists: m.assists !== false, rtt: null, via: conn.kind };
+      assignCar(p, m.car);
       net.guests.set(conn.peer, { conn, p, key: typeof m.key === 'string' ? m.key.slice(0, 32) : null, ack: 0, lastRx: nowS(), evq: [], snapT: 0, snapN: 0 });
       net.players.push(p);
       conn.send({ t: 'welcome', id: p.id });
@@ -2298,7 +2662,13 @@
         break;
       }
       case 'reset': { const c = carOf(g.p.id); if (c && canReset(c)) race.resetCar(c); break; }
-      case 'set': g.p.assists = m.assists !== false; break;
+      case 'set': {
+        g.p.assists = m.assists !== false;
+        const was = [g.p.number, g.p.color, g.p.color2, g.p.model].join();
+        if (m.car) assignCar(g.p, m.car);
+        if ([g.p.number, g.p.color, g.p.color2, g.p.model].join() !== was) renderNet();
+        break;
+      }
       case 'pit': { const c = carOf(g.p.id); if (c) race.requestPit(c, !!m.on); break; }
       case 'ping': conn.sendFast({ t: 'pong', c: m.c }); if (typeof m.rtt === 'number') g.p.rtt = m.rtt; g.p.turn = m.turn === 1; g.p.nrtt = typeof m.nr === 'number' ? m.nr : null; break;
     }
@@ -2320,9 +2690,9 @@
       settings: { track: cfg.track, laps: LAPS[cfg.track][cfg.len], difficulty: +cfg.difficulty, damage: cfg.damage, tires: cfg.tires, ai: cfg.netAi } });
   }
   function hostStartRace() {
-    const humans = net.players.map(p => ({ name: p.name, number: p.number, color: p.color, color2: p.color2, isPlayer: true, netId: p.id, assists: p.host ? !!cfg.assists : p.assists }));
+    const humans = net.players.map(p => ({ name: p.name, number: p.number, color: p.color, color2: p.color2, model: p.model, isPlayer: true, netId: p.id, assists: p.host ? !!cfg.assists : p.assists }));
     const ai = cfg.netAi === 'fill' ? Sim.shuffle(Sim.ROSTER.slice()).slice(0, Math.max(0, 10 - humans.length))
-      .map(c => Object.assign({}, c, { skill: clamp(+cfg.difficulty + (Math.random() - 0.5) * 0.8, 1, 10) })) : [];
+      .map(c => Object.assign({}, c, { skill: +cfg.difficulty >= 10 ? 10 : clamp(+cfg.difficulty + (Math.random() - 0.5) * 0.8, 1, 10) })) : [];
     const opt = { track: cfg.track, laps: LAPS[cfg.track][cfg.len], difficulty: +cfg.difficulty, damage: cfg.damage, tires: cfg.tires, assists: true, field: Sim.shuffle(humans.concat(ai)) };
     netBroadcast({ t: 'start', opt });
     startRace(opt);
@@ -2364,7 +2734,7 @@
   // ─── gość ───
   // najpierw bezpośrednio (PeerJS); gdy kanał nie otworzy się w ~6 s albo serwer PeerJS nie zna pokoju — przez przekaźnik
   const live = j => net.join === j;
-  const helloMsg = () => ({ t: 'hello', v: PROTO, name: myName(), assists: !!cfg.assists, key: net.key });
+  const helloMsg = () => ({ t: 'hello', v: PROTO, name: myName(), assists: !!cfg.assists, car: cleanCar(cfg.car), key: net.key });
   function netJoin() {
     const code = $('#netCode').value.trim().toUpperCase();
     if (!/^[A-Z0-9]{5}$/.test(code)) { netStatus('kod pokoju ma 5 znaków'); $('#netCode').focus(); return; }
@@ -2437,7 +2807,7 @@
     if (m.t === 'bye') return joinFail(j, '', m.why || 'gospodarz odrzucił połączenie');
     if (m.t !== 'welcome') return;
     j.tm.forEach(clearTimeout); net.join = null;
-    Object.assign(net, { mode: 'guest', code: j.code, myId: m.id, rtt0: false, rtts: [], sentAssists: !!cfg.assists, lastRx: nowS(), pingT: 0, sendT: 0 });
+    Object.assign(net, { mode: 'guest', code: j.code, myId: m.id, rtt0: false, rtts: [], sentAssists: !!cfg.assists, sentCar: JSON.stringify(cleanCar(cfg.car)), lastRx: nowS(), pingT: 0, sendT: 0 });
     netStatus(conn.kind === 'relay' ? 'połączono (przekaźnik)' : 'połączono (bezpośrednio)');
     renderNet();
     if (conn.kind === 'relay') guestUpgrade(0);
@@ -2501,8 +2871,8 @@
     switch (m.t) {
       case 'welcome': net.myId = m.id; renderNet(); break;
       case 'bye': netLost(m.why || 'gospodarz odrzucił połączenie'); break;
-      case 'lobby': net.players = m.players || []; net.settings = m.settings; net.racing = !!m.racing; renderNet(); retrack(); break;
-      case 'start': if (net.myId && m.opt.field.some(c => c.netId === net.myId)) startRace(m.opt); break;
+      case 'lobby': net.players = Array.isArray(m.players) ? m.players.filter(p => p && typeof p === 'object').map(safeCar) : []; net.settings = m.settings; net.racing = !!m.racing; renderNet(); retrack(); break;
+      case 'start': if (net.myId && m.opt.field.some(c => c.netId === net.myId)) { m.opt.field.forEach(safeCar); startRace(m.opt); } break;
       case 's': if (online() && state !== 'menu') guestSnap(m); break;
       case 'done': if (online() && state === 'race') startPodium(); break;
       case 'menu': if (online()) startAttract(); break;
@@ -2667,6 +3037,7 @@
     const dt = Math.min(0.05, Math.max(0, (now - last) / 1000)); last = now;
     step(dt);
     renderer.render(scene, camera);
+    if (state === 'menu' && garage) garage.draw(dt);
   }
   // Karta w tle (albo zminimalizowane okno) nie dostaje requestAnimationFrame. W grze online gospodarz musi jednak
   // liczyć dalej (inaczej wyścig staje wszystkim), a gość — odpowiadać na ping; wtedy krok odmierza zegar w Web Workerze.
@@ -2709,6 +3080,7 @@
       // podium przejmuje auta z pierwszej trójki i kamerę, dopóki gracz nie opuści wyników
       if (pod) podiumUpdate(dt); else placeCars(dt);
       updateCrews(dt);
+      updateCrowd(dt);
       updateFx(dt);
       if (!pod) updateCamera(dt);
       const tgt = pod ? pod.center.clone() : focus ? new THREE.Vector3(focus.x, 0, -focus.y) : new THREE.Vector3();
