@@ -28,27 +28,6 @@
   const NF0 = CAR.mass * G * CAR.b / CAR.wb, NR0 = CAR.mass * G * CAR.a / CAR.wb;
   const PEAK_SLIP = Math.tan(PI / (2 * CAR.C)) / CAR.B;
 
-  const TRACKS = {
-    speedway: {
-      id: 'speedway', name: 'Superspeedway', tag: '2,5 mili · 31°',
-      blurb: 'Gaz do dechy przez całe okrążenie. Samotnie jesteś wolny — w pociągu tunelu aerodynamicznego leci się o kilkanaście km/h szybciej.',
-      L: 1000, R: 325, W: 20, bankTurn: 31, bankStraight: 4, prog: 3, apron: 9, grass: 40,
-      power: 388000, cdA: 0.95, clA: 1.9, vGear: 200, transition: 240, laps: 8, pace: 40,
-    },
-    intermediate: {
-      id: 'intermediate', name: 'Owal 1,5 mili', tag: '1,47 mili · 22°',
-      blurb: 'Tu trzeba odpuszczać gaz na wejściu. Brudne powietrze za rywalem zabiera docisk przodu, auto zaczyna „pchać” w zakręcie.',
-      L: 520, R: 210, W: 17, bankTurn: 22, bankStraight: 5, prog: 3, apron: 8, grass: 30,
-      power: 500000, cdA: 1.0, clA: 2.9, vGear: 90, transition: 160, laps: 12, pace: 35,
-    },
-    short: {
-      id: 'short', name: 'Krótki owal', tag: '0,54 mili · 26°',
-      blurb: 'Pół mili ścisku. Hamowanie przed każdym zakrętem, dopychanie zderzakiem i walka o dolną linię.',
-      L: 190, R: 78, W: 15, bankTurn: 26, bankStraight: 7, prog: 2, apron: 6, grass: 16,
-      power: 500000, cdA: 1.0, clA: 2.9, vGear: 60, transition: 70, laps: 25, pace: 25,
-    },
-  };
-
   const ROSTER = [
     { name: 'K. Nowak', number: 7, color: '#d7263d', color2: '#f4f1de' },
     { name: 'T. Walsh', number: 12, color: '#1f4e9c', color2: '#f4c20d' },
@@ -62,7 +41,60 @@
     { name: 'L. Ferraz', number: 88, color: '#0096c7', color2: '#ffffff' },
   ];
 
-  // ───────────────────────────── TOR ─────────────────────────────
+  // Owale liczone analitycznie. Tory drogowe: łamana z mapy (px, oś y w dół) o zaokrąglonych narożnikach,
+  // path: [x, y, promień narożnika w px, przechyłka łuku°, przechyłka prostej za narożnikiem°] — przechyłka podnosi zewnętrzną stronę łuku.
+  // pitS: [wjazd, wyjazd, pierwszy boks, ostatni boks] w metrach względem linii mety; pitSide: +1 = pit lane po prawej.
+  const TRACKS = {
+    speedway: {
+      id: 'speedway', kind: 'oval', name: 'Superspeedway', tag: '2,5 mili · 31°',
+      blurb: 'Gaz do dechy przez całe okrążenie. Samotnie jesteś wolny — w pociągu tunelu aerodynamicznego leci się o kilkanaście km/h szybciej.',
+      L: 1000, R: 325, W: 20, bankTurn: 31, bankStraight: 4, prog: 3, apron: 9, grass: 40,
+      power: 388000, cdA: 0.95, clA: 1.9, vGear: 200, transition: 240, laps: 8, lapsOpt: [4, 8, 16], pace: 40, pitLimit: 25,
+    },
+    intermediate: {
+      id: 'intermediate', kind: 'oval', name: 'Owal 1,5 mili', tag: '1,47 mili · 22°',
+      blurb: 'Tu trzeba odpuszczać gaz na wejściu. Brudne powietrze za rywalem zabiera docisk przodu, auto zaczyna „pchać” w zakręcie.',
+      L: 520, R: 210, W: 17, bankTurn: 22, bankStraight: 5, prog: 3, apron: 8, grass: 30,
+      power: 500000, cdA: 1.0, clA: 2.9, vGear: 90, transition: 160, laps: 12, lapsOpt: [6, 12, 24], pace: 35, pitLimit: 22,
+    },
+    short: {
+      id: 'short', kind: 'oval', name: 'Krótki owal', tag: '0,54 mili · 26°',
+      blurb: 'Pół mili ścisku. Hamowanie przed każdym zakrętem, dopychanie zderzakiem i walka o dolną linię.',
+      L: 190, R: 78, W: 15, bankTurn: 26, bankStraight: 7, prog: 2, apron: 6, grass: 16,
+      power: 500000, cdA: 1.0, clA: 2.9, vGear: 60, transition: 70, laps: 25, lapsOpt: [12, 25, 50], pace: 25, pitLimit: 18,
+    },
+    indy: {
+      id: 'indy', kind: 'road', name: 'Indianapolis RC', tag: '2,44 mili · 14 zakrętów',
+      blurb: 'Tor drogowy wewnątrz owalu Indy, jazda w prawo. Kilometrowa prosta startowa, ciasne „dziewięćdziesiątki” w infieldzie i szybki, lekko przechylony łuk owalu na końcu okrążenia.',
+      W: 13, apron: 2.5, runoff: 15, power: 500000, cdA: 1.0, clA: 2.9, vGear: 80, laps: 6, lapsOpt: [3, 6, 12], pace: 26, pitLimit: 20,
+      scale: 1.62, sf: [572, 477], pitSide: 1, pitS: [-420, 300, -300, 130],
+      path: [[237, 477, 13], [237, 412, 11], [112, 408, 30], [97, 298, 17], [212, 298, 9], [232, 273, 9], [690, 273, 12], [690, 172, 11],
+        [738, 172, 9], [738, 78, 11], [965, 72, 100, 9], [965, 295, 11], [868, 295, 9], [892, 477, 36]],
+    },
+    daytona: {
+      id: 'daytona', kind: 'road', name: 'Daytona Road Course', tag: '3,61 mili · 14 zakrętów',
+      blurb: 'Infield z dwiema „podkowami”, potem wyjazd na 31° bankingu owalu, szykana na prostej przeciwległej i nowa szykana przed metą. Tunel aerodynamiczny wciąż działa na owalu.',
+      W: 13, apron: 2.5, runoff: 15, power: 500000, cdA: 1.0, clA: 2.9, vGear: 84, laps: 4, lapsOpt: [2, 4, 8], pace: 26, pitLimit: 20,
+      scale: 2.4, sf: [500, 534], pitSide: -1, pitS: [-300, 150, -200, 80],
+      path: [[655, 488, 15], [590, 428, 20], [455, 408, 12.5], [455, 383, 12.5], [640, 378, 20], [758, 312, 12.5], [775, 335, 12.5], [670, 452, 12.5],
+        [815, 455, 95, 31, 31], [815, 217, 95, 31, 3], [445, 217, 7.5], [425, 237, 7.5], [385, 237, 7.5], [365, 217, 7.5],
+        [178, 217, 95, 31, 31], [185, 445, 75, 31], [300, 462, 7.5], [318, 478, 7.5], [500, 534, 300, 12]],
+    },
+  };
+
+  // wspólne dla obu rodzajów toru: pit lane leży za poboczem po stronie pitSide
+  function pitLayout(tr, inS, outS, boxA, boxB) {
+    const e = tr.halfW + tr.apron, sd = tr.pitSide, boxS = [];
+    for (let i = 0; i < 10; i++) boxS.push(lerp(boxA, boxB, i / 9));
+    tr.pit = {
+      side: sd, inS, outS, boxA, boxB, boxS, limit: tr.pitLimit,
+      edge: e, outer: e + 10.2, driveD: e + 3.6, boxD: e + 7.6, wallD: e + 0.6,
+      lineA: boxA - 45, lineB: boxB + 35, wallA: boxA - 30, wallB: boxB + 22,
+    };
+  }
+  function inRange(tr, s, a, b) { return mod(s - a, tr.len) <= mod(b - a, tr.len); }
+
+  // ───────────────────────────── OWAL ─────────────────────────────
   class Track {
     constructor(def) {
       Object.assign(this, def);
@@ -73,17 +105,23 @@
       this.bT = this.bankTurn * DEG; this.bS = this.bankStraight * DEG; this.bP = this.prog * DEG;
       const PR = PI * this.R;
       this.turns = [[this.L / 2, this.L / 2 + PR], [1.5 * this.L + PR, this.len - this.L / 2]];
+      this.pitSide = -1;
+      // na długich prostych stanowiska za linią mety — cała droga hamowania do limitera mieści się w alei
+      const bx = Math.min(0.36 * this.L, 110), sh = clamp(0.35 * this.L - bx, 0, 0.25 * this.L);
+      pitLayout(this, -this.L / 2 - Math.min(0.3 * PR, 70), this.L / 2 + 0.3 * PR, sh - bx, sh + bx);
+      const e = this.R + this.halfW; this.bounds = { x0: -this.L / 2 - e, x1: this.L / 2 + e, y0: -e, y1: e };
+      this.podiumD = this.innerWall - 24;
     }
     geom(sg) {
       const L = this.L, R = this.R, PR = PI * R;
-      if (sg < L) return { x: -L / 2 + sg, y: -R, th: 0, nx: 0, ny: -1, arc: 0 };
+      if (sg < L) return { x: -L / 2 + sg, y: -R, th: 0, nx: 0, ny: -1, arc: 0, k: 0 };
       sg -= L;
-      if (sg < PR) { const t = -PI / 2 + sg / R, c = Math.cos(t), s = Math.sin(t); return { x: L / 2 + R * c, y: R * s, th: t + PI / 2, nx: c, ny: s, arc: 1 }; }
+      if (sg < PR) { const t = -PI / 2 + sg / R, c = Math.cos(t), s = Math.sin(t); return { x: L / 2 + R * c, y: R * s, th: t + PI / 2, nx: c, ny: s, arc: 1, k: 1 / R }; }
       sg -= PR;
-      if (sg < L) return { x: L / 2 - sg, y: R, th: PI, nx: 0, ny: 1, arc: 0 };
+      if (sg < L) return { x: L / 2 - sg, y: R, th: PI, nx: 0, ny: 1, arc: 0, k: 0 };
       sg -= L;
       const t = PI / 2 + sg / R, c = Math.cos(t), s = Math.sin(t);
-      return { x: -L / 2 + R * c, y: R * s, th: t + PI / 2, nx: c, ny: s, arc: 1 };
+      return { x: -L / 2 + R * c, y: R * s, th: t + PI / 2, nx: c, ny: s, arc: 1, k: 1 / R };
     }
     frame(s) { return this.geom(mod(s + this.L / 2, this.len)); }
     toWorld(s, d) { const f = this.frame(s); return { x: f.x + f.nx * d, y: f.y + f.ny * d }; }
@@ -120,15 +158,191 @@
       const f = this.turnFactor(s), dd = Math.min(d, this.halfW) + this.halfW, t = dd / this.W;
       return dd * Math.tan(lerp(this.bS, this.bT, f) + this.bP * f * (t / 2 - 0.5));
     }
-    curvature(s, d) { return this.frame(s).arc ? 1 / (this.R + d) : 0; }
+    // znakowana krzywizna toru na odsunięciu d (dodatnia = łuk w lewo)
+    kappa(s, d) { return this.frame(s).arc ? 1 / Math.max(this.R * 0.3, this.R + d) : 0; }
+    wallIn() { return this.innerWall; }
+    wallOut() { return this.outerWall; }
+    // 0 asfalt, 1 pobocze (apron), 2 trawa, 3 pit lane
+    surface(s, d) {
+      if (d >= -this.halfW) return 0;
+      if (d >= -this.halfW - this.apron) return 1;
+      return inPit(this, s, d) ? 3 : 2;
+    }
+    resetD() { return -this.halfW - this.apron * 0.5; }
     // znakowana odległość wzdłuż toru b względem a, w zakresie [-len/2, len/2]
     ds(a, b) { let x = b - a; if (x > this.len / 2) x -= this.len; else if (x < -this.len / 2) x += this.len; return x; }
+  }
+  function inPit(tr, s, d) { const P = tr.pit, dd = d * P.side; return dd >= P.edge - 0.2 && dd <= P.outer && inRange(tr, s, P.inS, P.outS); }
+
+  // ───────────────────────────── TOR DROGOWY ─────────────────────────────
+  const pathCache = {};
+  class PathTrack {
+    constructor(def) {
+      Object.assign(this, def);
+      this.halfW = this.W / 2;
+      const sc = this.scale, V = this.path.map(p => ({ x: p[0] * sc, y: -p[1] * sc, r: p[2] * sc, bank: (p[3] || 0) * DEG, sbank: (p[4] || 0) * DEG })), nv = V.length;
+      for (let i = 0; i < nv; i++) {
+        const a = V[(i + nv - 1) % nv], v = V[i], b = V[(i + 1) % nv];
+        let ix = v.x - a.x, iy = v.y - a.y; const li = Math.hypot(ix, iy); ix /= li; iy /= li;
+        let ox = b.x - v.x, oy = b.y - v.y; const lo = Math.hypot(ox, oy); ox /= lo; oy /= lo;
+        v.phi = Math.atan2(ix * oy - iy * ox, ix * ox + iy * oy);
+        const t = v.r * Math.tan(Math.abs(v.phi) / 2), sg = Math.sign(v.phi) || 1;
+        v.ax = v.x - ix * t; v.ay = v.y - iy * t; v.bx = v.x + ox * t; v.by = v.y + oy * t;
+        v.cx = v.ax - iy * v.r * sg; v.cy = v.ay + ix * v.r * sg; v.th0 = Math.atan2(iy, ix);
+        v.arcL = v.r * Math.abs(v.phi); v.ox = ox; v.oy = oy;
+      }
+      // odcinki: łuk narożnika i, prosta do narożnika i+1
+      const pieces = [];
+      for (let i = 0; i < nv; i++) {
+        const v = V[i], w = V[(i + 1) % nv];
+        pieces.push({ arc: v, L: v.arcL });
+        const L = Math.hypot(w.ax - v.bx, w.ay - v.by);
+        if (L < -1e-6 || (w.ax - v.bx) * v.ox + (w.ay - v.by) * v.oy < -1e-3) throw new Error(`${this.id}: narożniki ${i} i ${i + 1} nachodzą na siebie`);
+        pieces.push({ x: v.bx, y: v.by, dx: v.ox, dy: v.oy, L, bank: v.sbank * (Math.sign(v.phi) || 1) });
+      }
+      const total = pieces.reduce((a, p) => a + p.L, 0), n = this.n = Math.round(total);
+      const h = this.h = total / n;
+      this.len = total;
+      const X = this.X = new Float64Array(n), Y = this.Y = new Float64Array(n), TH = this.TH = new Float64Array(n), K = this.K = new Float32Array(n), B0 = new Float32Array(n);
+      let pi = 0, p0 = 0;
+      for (let i = 0; i < n; i++) {
+        let u = i * h - p0;
+        while (u > pieces[pi].L && pi < pieces.length - 1) { p0 += pieces[pi].L; u -= pieces[pi].L; pi++; }
+        const p = pieces[pi];
+        if (p.arc) {
+          const v = p.arc, sg = Math.sign(v.phi) || 1, a = sg * u / v.r, rx = v.ax - v.cx, ry = v.ay - v.cy, ca = Math.cos(a), sa = Math.sin(a);
+          X[i] = v.cx + rx * ca - ry * sa; Y[i] = v.cy + rx * sa + ry * ca; TH[i] = v.th0 + a; K[i] = sg / v.r; B0[i] = sg * v.bank;
+        } else { X[i] = p.x + p.dx * u; Y[i] = p.y + p.dy * u; TH[i] = Math.atan2(p.dy, p.dx); K[i] = 0; B0[i] = p.bank; }
+      }
+      // start/meta w punkcie sf
+      const sx = this.sf[0] * sc, sy = -this.sf[1] * sc;
+      let i0 = 0, bd = 1e18;
+      for (let i = 0; i < n; i++) { const q = (X[i] - sx) ** 2 + (Y[i] - sy) ** 2; if (q < bd) { bd = q; i0 = i; } }
+      for (const A of [X, Y, TH, K, B0]) { const c = A.slice(); for (let i = 0; i < n; i++) A[i] = c[(i + i0) % n]; }
+      for (let i = 1; i < n; i++) { while (TH[i] - TH[i - 1] > PI) TH[i] -= 2 * PI; while (TH[i] - TH[i - 1] < -PI) TH[i] += 2 * PI; }
+      const NX = this.NX = new Float64Array(n), NY = this.NY = new Float64Array(n);
+      for (let i = 0; i < n; i++) { NX[i] = Math.sin(TH[i]); NY[i] = -Math.cos(TH[i]); }
+      const avg = (A, w) => { const o = new Float32Array(n); let acc = 0; for (let j = -w; j <= w; j++) acc += A[mod(j, n)]; for (let i = 0; i < n; i++) { o[i] = acc / (2 * w + 1); acc += A[(i + w + 1) % n] - A[mod(i - w, n)]; } return o; };
+      const wn = Math.round(1 / h);
+      // przechyłka narasta łagodnie (±60 m); „w zakręcie” = promień poniżej ~450 m
+      this.B = avg(B0, Math.round(60 * wn));
+      const Ka = new Float32Array(n); for (let i = 0; i < n; i++) Ka[i] = Math.abs(K[i]);
+      const Ks = avg(Ka, Math.round(15 * wn));
+      this.turnA = new Uint8Array(n); for (let i = 0; i < n; i++) this.turnA[i] = Ks[i] > 1 / 450 ? 1 : 0;
+      this.curbA = new Uint8Array(n); const Kc = avg(Ka, Math.round(8 * wn)); for (let i = 0; i < n; i++) this.curbA[i] = Kc[i] > 1 / 260 ? 1 : 0;
+      const [inS, outS, boxA, boxB] = this.pitS;
+      pitLayout(this, inS, outS, boxA, boxB);
+      this.buildWalls(Ka);
+      let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+      for (let i = 0; i < n; i++) { x0 = Math.min(x0, X[i]); x1 = Math.max(x1, X[i]); y0 = Math.min(y0, Y[i]); y1 = Math.max(y1, Y[i]); }
+      const e = this.halfW + 4; this.bounds = { x0: x0 - e, x1: x1 + e, y0: y0 - e, y1: y1 + e };
+      this.outerWall = this.halfW + this.apron + this.runoff; this.innerWall = -this.outerWall;
+      this.podiumD = this.pitSide * (this.pit.outer + 16);
+    }
+    // Bandy: za poboczem i pasem trawy, w przechylonym łuku tuż przy krawędzi, wewnątrz ciasnego łuku bliżej niż promień,
+    // i nigdy dalej niż w połowie drogi do sąsiedniego fragmentu toru.
+    buildWalls(Ka) {
+      const n = this.n, h = this.h, X = this.X, Y = this.Y, P = this.pit, e = this.halfW + this.apron;
+      const cell = 24, grid = new Map(), key = (gx, gy) => gx * 100003 + gy;
+      for (let i = 0; i < n; i += 2) { const k = key(Math.floor(X[i] / cell), Math.floor(Y[i] / cell)); if (!grid.has(k)) grid.set(k, []); grid.get(k).push(i); }
+      const conflict = (i, px, py, o) => {
+        const gx = Math.floor(px / cell), gy = Math.floor(py / cell), r = Math.ceil(o / cell) + 1;
+        for (let ax = gx - r; ax <= gx + r; ax++) for (let ay = gy - r; ay <= gy + r; ay++) {
+          const L = grid.get(key(ax, ay)); if (!L) continue;
+          for (const j of L) {
+            if (Math.abs(this.ds(i * h, j * h)) < o * 1.6 + 25) continue;
+            if ((X[j] - px) ** 2 + (Y[j] - py) ** 2 < o * o) return true;
+          }
+        }
+        return false;
+      };
+      const kmax = new Float32Array(n), w = Math.round(12 / h);
+      for (let i = 0; i < n; i++) { let m = 0; for (let j = -w; j <= w; j += 2) m = Math.max(m, Ka[mod(i + j, n)]); kmax[i] = m; }
+      const raw = [new Float32Array(n), new Float32Array(n)];
+      for (let side = 0; side < 2; side++) {
+        const sg = side ? 1 : -1, R = raw[side];
+        for (let i = 0; i < n; i++) {
+          let lim = e + this.runoff;
+          const bk = this.B[i] * sg;                        // > 0: ta strona jest zewnętrzną stroną przechylonego łuku
+          if (bk > 0) lim = lerp(lim, this.halfW + 0.3, clamp(bk / (6 * DEG), 0, 1));
+          if (this.K[i] * sg < 0 || kmax[i] > 1 / 60) lim = Math.min(lim, 0.8 / Math.max(kmax[i], 1e-4));
+          if (sg === P.side && inRange(this, i * h, P.inS - 30, P.outS + 30)) lim = Math.max(lim, P.outer + 1.6);
+          lim = Math.max(lim, this.halfW + 1.2);
+          const px = o => X[i] + this.NX[i] * sg * o, py = o => Y[i] + this.NY[i] * sg * o;
+          if (conflict(i, px(lim), py(lim), lim)) {
+            let lo = this.halfW + 1, hi = lim;
+            for (let it = 0; it < 7; it++) { const m = (lo + hi) / 2; if (conflict(i, px(m), py(m), m)) hi = m; else lo = m; }
+            lim = Math.max(this.halfW + 1, lo - 0.5);
+          }
+          R[i] = lim;
+        }
+      }
+      // bez zębów: minimum w oknie ±6 m, potem wygładzenie
+      const out = [], ww = Math.round(6 / h);
+      for (const R of raw) {
+        const m = new Float32Array(n), o = new Float32Array(n);
+        for (let i = 0; i < n; i++) { let v = 1e9; for (let j = -ww; j <= ww; j++) v = Math.min(v, R[mod(i + j, n)]); m[i] = v; }
+        let acc = 0; for (let j = -ww; j <= ww; j++) acc += m[mod(j, n)];
+        for (let i = 0; i < n; i++) { o[i] = acc / (2 * ww + 1); acc += m[(i + ww + 1) % n] - m[mod(i - ww, n)]; }
+        out.push(o);
+      }
+      this.WI = out[0]; this.WO = out[1];
+    }
+    at(s) { const f = mod(s, this.len) / this.h, i = Math.floor(f) % this.n; return [i, (i + 1) % this.n, f - Math.floor(f)]; }
+    frame(s) {
+      const [i, j, t] = this.at(s), th = this.TH[i] + angDiff(this.TH[j], this.TH[i]) * t;
+      return { x: lerp(this.X[i], this.X[j], t), y: lerp(this.Y[i], this.Y[j], t), th, nx: Math.sin(th), ny: -Math.cos(th), k: this.K[i], arc: this.K[i] ? 1 : 0 };
+    }
+    toWorld(s, d) { const f = this.frame(s); return { x: f.x + f.nx * d, y: f.y + f.ny * d }; }
+    // najbliższy punkt osi: od podpowiedzi (poprzednie s auta) wspinaczka po próbkach, bez podpowiedzi — przegląd co 8 m
+    toLocal(x, y, hint) {
+      const n = this.n, X = this.X, Y = this.Y, d2 = i => { i = mod(i, n); return (X[i] - x) ** 2 + (Y[i] - y) ** 2; };
+      let i;
+      if (hint != null) i = Math.round(mod(hint, this.len) / this.h) % n;
+      else { let b = 1e18; i = 0; for (let j = 0; j < n; j += 8) { const q = d2(j); if (q < b) { b = q; i = j; } } }
+      let best = d2(i);
+      for (let it = 0; it < 400; it++) { const a = d2(i + 1), b = d2(i - 1); if (a < best) { i++; best = a; } else if (b < best) { i--; best = b; } else break; }
+      i = mod(i, n);
+      const dx = x - X[i], dy = y - Y[i], tx = -this.NY[i], ty = this.NX[i];
+      return { s: mod(i * this.h + dx * tx + dy * ty, this.len), d: dx * this.NX[i] + dy * this.NY[i] };
+    }
+    inTurn(s) { return this.turnA[this.at(s)[0]] === 1; }
+    turnFactor(s) { return this.inTurn(s) ? 1 : 0; }
+    curb(s) { return this.curbA[this.at(s)[0]] === 1; }
+    bankRaw(s) { const [i, j, t] = this.at(s); return lerp(this.B[i], this.B[j], t); }
+    bank(s, d) { return Math.abs(d) > this.halfW + 0.35 ? 0 : this.bankRaw(s); }
+    height(s, d) {
+      const b = this.bankRaw(s); if (Math.abs(b) < 1e-4) return 0;
+      const dd = clamp(d, -this.halfW, this.halfW);
+      return (b > 0 ? dd + this.halfW : dd - this.halfW) * Math.tan(b);
+    }
+    kappa(s, d) { const k = this.K[this.at(s)[0]]; return k / Math.max(0.3, 1 + k * d); }
+    wallIn(s) { const [i, j, t] = this.at(s); return -lerp(this.WI[i], this.WI[j], t); }
+    wallOut(s) { const [i, j, t] = this.at(s); return lerp(this.WO[i], this.WO[j], t); }
+    surface(s, d) {
+      const a = Math.abs(d);
+      if (a <= this.halfW) return 0;
+      if (a <= this.halfW + this.apron) return 1;
+      return inPit(this, s, d) ? 3 : 2;
+    }
+    resetD() { return this.pitSide * -(this.halfW - 1.6); }
+    ds(a, b) { let x = b - a; if (x > this.len / 2) x -= this.len; else if (x < -this.len / 2) x += this.len; return x; }
+  }
+  function makeTrack(id) {
+    const def = TRACKS[id] || TRACKS.speedway;
+    if (def.kind !== 'road') return new Track(def);
+    return pathCache[def.id] || (pathCache[def.id] = new PathTrack(def));
   }
 
   // ─────────────────────── MODEL OPON / NOŚNOŚCI ───────────────────────
   function tireMu(N, N0) { return clamp(1 - CAR.loadSens * (N / N0 - 1), 0.6, 1.15); }
   function driveForce(tr, u, powerMul) { return Math.min(CAR.maxDrive * powerMul, tr.power * powerMul / Math.max(u, 1)); }
   function pacejka(alpha) { return Math.sin(CAR.C * Math.atan(CAR.B * alpha)); }
+  // przyczepność zużytej opony: łagodny spadek, a po ~85% zużycia — „klif”
+  function tireGrip(w) { return clamp(1 - 0.09 * w - (w > 0.85 ? 0.6 * (w - 0.85) ** 2 + 0.25 * (w - 0.85) : 0), 0.45, 1); }
+  // ile zużycia (0..1) na metr przy „przeciętnej” jeździe: jeden komplet opon ≈ 60% średniego dystansu toru
+  const TIRE_MUL = { off: 0, normal: 1, fast: 2.3 };
+  function tireRate(def, len, mode) { const mid = def.lapsOpt ? def.lapsOpt[1] : def.laps; return (TIRE_MUL[mode] || 0) / (0.6 * mid * len * 0.72); }
 
   // zapas przyczepności bocznej w ustalonym zakręcie (to samo co w fizyce, w wersji „stacjonarnej”)
   function latMargin(tr, v, k, beta, grip, dfMul) {
@@ -168,14 +382,16 @@
       this.hit = 0; this.scrape = 0; this.lastHitT = -9;
       this.lapStartT = null; this.lastLap = null; this.bestLap = Infinity; this.laps = [];
       this.finishT = null; this.finishPos = 0; this.resets = 0; this.stuckT = 0;
+      this.tire = 0; this.tireLap = 0; this.wearLap = 0; this.pit = null; this.pitReq = false; this.pits = 0; this.boost = this.boost || 1;
     }
   }
 
   // ───────────────────────────── WYŚCIG ─────────────────────────────
   class Race {
     constructor(opt) {
-      this.opt = Object.assign({ track: 'speedway', laps: 8, difficulty: 5, damage: 'simple', grid: 8, assists: true, attract: false }, opt);
-      this.track = new Track(TRACKS[this.opt.track]);
+      this.opt = Object.assign({ track: 'speedway', laps: 8, difficulty: 5, damage: 'simple', grid: 8, assists: true, attract: false, tires: 'normal' }, opt);
+      this.track = makeTrack(this.opt.track);
+      this.tireK = tireRate(TRACKS[this.track.id], this.track.len, this.opt.tires);
       this.laps = this.opt.laps;
       this.t = 0; this.acc = 0; this.sub = 0;
       this.phase = 'pace'; this.greenT = null; this.finishedCount = 0; this.leaderLap = 0;
@@ -189,7 +405,23 @@
       this.step = 4; this.n = Math.ceil(tr.len / this.step);
       this.lanes = []; for (let i = 0; i < NL; i++) this.lanes.push(-tr.halfW + 1.2 + i * (tr.W - 2.4) / (NL - 1));
       this.laneV = this.lanes.map(d => this.tableFor(() => d));
-      const lo = -tr.halfW + 1.6, mid = -tr.halfW + 5, hi = tr.halfW - 2.4;
+      let defs;
+      if (tr.kind === 'road') {
+        // tor drogowy: linia minimalnej krzywizny (zewnątrz–wewnątrz–zewnątrz) i jej łagodniejsze wersje
+        const rl = this.raceLine(), n = this.n, st = this.step;
+        const at = amp => s => { const f = mod(s, tr.len) / st, i = Math.floor(f) % n, t = f - Math.floor(f); return amp * lerp(rl[i], rl[(i + 1) % n], t); };
+        defs = { race: at(1), wide: at(0.82), mid: at(0.6) };
+      } else defs = this.ovalLines();
+      this.lines = {};
+      for (const k in defs) { const v = this.tableFor(defs[k]); this.lines[k] = { d: defs[k], v, time: this.lineTime(defs[k], v) }; }
+      this.bestLine = Object.keys(this.lines).sort((a, b) => this.lines[a].time - this.lines[b].time)[0];
+      // strata na postoju: strefa limitera + serwis + hamowanie i rozpędzanie
+      const P = tr.pit, pl = mod(P.lineB - P.lineA, tr.len);
+      this.lapEst = this.lines[this.bestLine].time * 1.04;
+      this.pitLoss = pl / P.limit + 11.5 - pl / (tr.len / this.lapEst) + 12;
+    }
+    ovalLines() {
+      const tr = this.track, lo = -tr.halfW + 1.6, mid = -tr.halfW + 5, hi = tr.halfW - 2.4;
       const swoop = s => {
         let w = 0;
         for (const [a, b] of tr.turns) {
@@ -198,10 +430,42 @@
         }
         return lerp(hi - 1, lo, w);
       };
-      const defs = { bottom: () => lo, second: () => mid, top: () => hi, swoop };
-      this.lines = {};
-      for (const k in defs) { const v = this.tableFor(defs[k]); this.lines[k] = { d: defs[k], v, time: this.lineTime(defs[k], v) }; }
-      this.bestLine = Object.keys(this.lines).sort((a, b) => this.lines[a].time - this.lines[b].time)[0];
+      return { bottom: () => lo, second: () => mid, top: () => hi, swoop };
+    }
+    // Linia wyścigowa jak w K1999: każdy punkt przesuwany w poprzek toru tak, by krzywizna zmieniała się liniowo
+    // między sąsiadami — od długich odcinków do krótkich. Wychodzi zewnątrz–wewnątrz–zewnątrz, w granicach szerokości toru.
+    raceLine() {
+      const tr = this.track, n = this.n, st = this.step, lim = tr.halfW - 1.5;
+      const cx = new Float64Array(n), cy = new Float64Array(n), nx = new Float64Array(n), ny = new Float64Array(n), d = new Float64Array(n);
+      for (let i = 0; i < n; i++) { const f = tr.frame(i * st); cx[i] = f.x; cy[i] = f.y; nx[i] = f.nx; ny[i] = f.ny; }
+      const X = i => { i = mod(i, n); return cx[i] + nx[i] * d[i]; }, Y = i => { i = mod(i, n); return cy[i] + ny[i] * d[i]; };
+      const rinv = (a, b, c) => {
+        const x1 = X(b) - X(a), y1 = Y(b) - Y(a), x2 = X(c) - X(b), y2 = Y(c) - Y(b), x3 = X(c) - X(a), y3 = Y(c) - Y(a);
+        return 2 * (x1 * y2 - y1 * x2) / Math.max(1e-9, Math.sqrt((x1 * x1 + y1 * y1) * (x2 * x2 + y2 * y2) * (x3 * x3 + y3 * y3)));
+      };
+      for (let stp = 64; stp >= 1; stp >>= 1) {
+        const iters = stp >= 16 ? 60 : 40;
+        for (let it = 0; it < iters; it++) {
+          for (let i = 0; i < n; i += stp) {
+            const p = i - stp, q = i + stp;
+            const r0 = rinv(p - stp, p, i), r1 = rinv(i, q, q + stp);
+            const lp = Math.hypot(X(i) - X(p), Y(i) - Y(p)), ln = Math.hypot(X(q) - X(i), Y(q) - Y(i));
+            const target = (ln * r0 + lp * r1) / Math.max(1e-6, ln + lp);
+            const c0 = rinv(p, i, q), old = d[i];
+            d[i] = old + 0.05; const c1 = rinv(p, i, q); d[i] = old;
+            const dc = (c1 - c0) / 0.05;
+            if (Math.abs(dc) > 1e-9) d[i] = clamp(old + (target - c0) / dc, -lim, lim);
+          }
+          if (stp > 1) for (let i = 0; i < n; i += stp) {        // punkty pośrednie liniowo
+            const j = i + stp, dj = d[mod(j, n)];
+            for (let k = 1; k < stp && i + k < n; k++) d[i + k] = lerp(d[i], dj, k / stp);
+          }
+        }
+      }
+      // lekkie wygładzenie resztek szumu
+      const o = new Float32Array(n);
+      for (let i = 0; i < n; i++) o[i] = (d[mod(i - 1, n)] + 2 * d[i] + d[(i + 1) % n]) / 4;
+      return o;
     }
     tableFor(dfn) {
       const tr = this.track, v = new Float32Array(this.n), h = 6;
@@ -209,9 +473,21 @@
         const s = i * this.step;
         const p0 = tr.toWorld(s - h, dfn(s - h)), p1 = tr.toWorld(s, dfn(s)), p2 = tr.toWorld(s + h, dfn(s + h));
         const a = Math.hypot(p1.x - p0.x, p1.y - p0.y), b = Math.hypot(p2.x - p1.x, p2.y - p1.y), c = Math.hypot(p2.x - p0.x, p2.y - p0.y);
-        const cr = Math.abs((p1.x - p0.x) * (p2.y - p0.y) - (p1.y - p0.y) * (p2.x - p0.x));
-        const k = 2 * cr / Math.max(1e-6, a * b * c);
-        v[i] = Math.min(tr.vGear, cornerSpeed(tr, k, tr.bank(s, dfn(s))));
+        const cr = (p1.x - p0.x) * (p2.y - p0.y) - (p1.y - p0.y) * (p2.x - p0.x);
+        const k = 2 * Math.abs(cr) / Math.max(1e-6, a * b * c);
+        // przechyłka pomaga tylko wtedy, gdy jest nachylona do środka łuku
+        v[i] = Math.min(tr.vGear, cornerSpeed(tr, k, tr.bank(s, dfn(s)) * (cr < 0 ? -1 : 1)));
+      }
+      return tr.kind === 'road' ? this.brakeAware(v, dfn) : v;
+    }
+    // Tor drogowy: hamowanie przed łukiem liczone wstecz. Im bliżej granicy przyczepności w poprzek,
+    // tym mniej zostaje na hamowanie (koło tarcia) — dzięki temu AI kończy hamować, zanim mocno skręci.
+    brakeAware(vc, dfn) {
+      const tr = this.track, n = this.n, st = this.step, v = Float32Array.from(vc), len = new Float32Array(n), A = 7.4;
+      for (let i = 0; i < n; i++) { const a = tr.toWorld(i * st, dfn(i * st)), b = tr.toWorld((i + 1) * st, dfn((i + 1) * st)); len[i] = Math.hypot(b.x - a.x, b.y - a.y); }
+      for (let pass = 0; pass < 2; pass++) for (let j = n - 1; j >= 0; j--) {
+        const nx = v[(j + 1) % n], lat = Math.min(1, (nx / Math.max(1, vc[j])) ** 2);
+        v[j] = Math.min(v[j], Math.sqrt(nx * nx + 2 * A * Math.sqrt(Math.max(0.08, 1 - lat * lat)) * len[j]));
       }
       return v;
     }
@@ -255,6 +531,9 @@
         c.prog = tr.ds(0, s); c.gridLane = d;
         c.vx = Math.cos(f.th) * tr.pace; c.vy = Math.sin(f.th) * tr.pace;
         const skill = c.skill != null ? c.skill : c.isPlayer ? 10 : clamp(o.difficulty + (Math.random() - 0.5) * (o.attract ? 3 : 0.8), 1, 10);
+        // poziom 11: kierowcy jak na 10, ale silniki AI mają o 1% więcej mocy
+        if (!c.isPlayer && o.difficulty >= 11) c.boost = 1.01;
+        c.pitBox = i;
         c.driver = new Driver(c, this, skill);
       });
       this.order = this.cars.slice();
@@ -263,6 +542,12 @@
     effects(car) {
       const m = this.opt.damage, D = car.dmg, f = car.fx;
       f.power = 1; f.drag = 1; f.df = 1; f.gripF = 1; f.gripR = 1; f.toe = 0;
+      this.damageFx(car, m, D, f);
+      const tg = tireGrip(car.tire);
+      f.power *= car.boost || 1; f.gripF *= tg; f.gripR *= tg;
+      return f;
+    }
+    damageFx(car, m, D, f) {
       if (m === 'simple') {
         const h = D.health; f.power = 0.84 + 0.16 * h; f.drag = 1 + 0.22 * (1 - h); f.df = 1 - 0.2 * (1 - h);
       } else if (m === 'full') {
@@ -283,8 +568,10 @@
       const tr = this.track, m = CAR.mass;
       const fr = tr.frame(car.s), e = car.fx;
       let beta = 0, surf = 1, rollX = 0;
-      if (car.d >= -tr.halfW) { beta = tr.bank(car.s, car.d); car.surface = 'asphalt'; }
-      else if (car.d >= -tr.halfW - tr.apron) { surf = 0.96; car.surface = 'apron'; }
+      const sk = tr.surface(car.s, car.d);
+      if (sk === 0) { beta = tr.bank(car.s, car.d); car.surface = 'asphalt'; }
+      else if (sk === 1) { surf = 0.96; car.surface = 'apron'; }
+      else if (sk === 3) { car.surface = 'pit'; }
       else { surf = 0.55; rollX = 0.12; car.surface = 'grass'; }
       const cps = Math.cos(car.psi), sps = Math.sin(car.psi);
       const u = car.vx * cps + car.vy * sps, v = -car.vx * sps + car.vy * cps;
@@ -293,7 +580,7 @@
       const df = tr.clA * q * e.df;
       const dfF = df * CAR.aeroFront * (1 - car.dirty), dfR = df * (1 - CAR.aeroFront) * (1 - car.aeroLoose);
       const tx = Math.cos(fr.th), ty = Math.sin(fr.th), vt = car.vx * tx + car.vy * ty;
-      const kap = fr.arc && car.d > -tr.halfW - tr.apron ? 1 / (tr.R + car.d) : 0;
+      const kap = tr.kappa(car.s, car.d);
       const aIn = vt * vt * kap, sb = Math.sin(beta), cb = Math.cos(beta);
       const Nb = Math.max(0.3 * m * G, m * (G * cb + aIn * sb));
       const wt = m * car.axf * CAR.h / CAR.wb;
@@ -330,14 +617,20 @@
       car.axf += (Fx / m - car.axf) * Math.min(1, dt * 8);
       car.u = u; car.v = v; car.speed = V; car.latG = Fy / m / G; car.lonG = car.axf / G;
       car.gripUse = Math.max(Math.abs(fyF) / Math.max(1, capF), Math.abs(fyR) / Math.max(1, capR));
-      car.capR = capR; car.fyR = fyR;
+      // zużycie opon: droga × obciążenie, ślizg, buksowanie i blokowanie kół ścierają gumę szybciej
+      if (this.tireK && !this.opt.replica && V > 1) {
+        const slide = Math.max(0, Math.abs(aF) - PEAK_SLIP) + Math.max(0, Math.abs(aR) - PEAK_SLIP);
+        const lock = car.brake > 0.2 && brakeF > 0.95 * (capF + capR) * CAR.brakeMu ? 0.5 : 0;
+        car.tire += dt * V * this.tireK * (0.3 + 0.9 * car.gripUse * car.gripUse + 6 * slide + 1.2 * car.wheelspin + lock) * (surf < 0.9 ? 0.5 : 1);
+      }
+      car.capR = capR; car.fyR = fyR; car.capF = capF;
     }
 
     // wejście gracza → polecenia (z asystami)
     playerCmd(car) {
       const V = car.speed, c = car.ctl;
       // pełne wychylenie ≈ skręt potrzebny na łuk przed autem + zapas na granicę przyczepności
-      const kAhead = this.track.curvature(car.s + V * 0.4, clamp(car.d, -this.track.halfW, this.track.halfW));
+      const kAhead = Math.abs(this.track.kappa(car.s + V * 0.4, clamp(car.d, -this.track.halfW, this.track.halfW)));
       const dmax = clamp(CAR.wb * kAhead + 0.011 + 32 / Math.max(1, V * V), 0.02, 0.42);
       let dl = c.steer * dmax, th = c.throttle;
       if ((car.assists != null ? car.assists : this.opt.assists) && V > 8) {
@@ -346,7 +639,9 @@
         if (Math.abs(over) > 0.04) dl -= 0.35 * (over - Math.sign(over) * 0.04);
         th = Math.min(th, tractionThrottle(this, car, 0.93));
       }
-      car.cmd.delta = dl; car.cmd.throttle = th; car.cmd.brake = c.brake;
+      let br = c.brake;
+      if ((car.assists != null ? car.assists : this.opt.assists) && V > 8) br = Math.min(br, brakeLimit(car, 0.95));
+      car.cmd.delta = dl; car.cmd.throttle = th; car.cmd.brake = br;
     }
 
     actuate(car, dt) {
@@ -366,7 +661,7 @@
       if (this.sub++ % 4 === 0) this.aiTick(dt * 4);
       for (const c of this.cars) {
         if (c.status === 'out') continue;
-        if (c.isPlayer && c.status === 'racing' && this.phase !== 'pace') this.playerCmd(c);
+        if (c.isPlayer && c.status === 'racing' && this.phase !== 'pace' && !c.pit) this.playerCmd(c);
         this.actuate(c, dt);
         this.physics(c, dt);
         c.hit = Math.max(0, c.hit - dt * 3); c.scrape = Math.max(0, c.scrape - dt * 4);
@@ -384,7 +679,8 @@
         if (c.status === 'out') continue;
         this.effects(c);
         this.thermal(c, dt);
-        if (!c.isPlayer || this.phase === 'pace' || c.status !== 'racing') c.driver.update(dt);
+        this.pitLogic(c);
+        if (!c.isPlayer || this.phase === 'pace' || c.status !== 'racing' || c.pit) c.driver.update(dt);
         if (c.status === 'dnf' && this.t - c.dnfT > 7) { c.status = 'out'; this.events.push({ type: 'out', car: c }); }
       }
       this.standings();
@@ -436,6 +732,10 @@
         D.wearF += dt * 0.012 * (D.front - 0.45) * 4;
         if (D.wearF >= 1 && !D.flatF) { D.flatF = true; this.events.push({ type: 'flat', car: c }); }
       }
+      // opona starta do płótna potrafi pęknąć
+      if (c.tire > 1.2 && c.speed > 25 && Math.random() < dt * 0.25 * (c.tire - 1.2)) {
+        const f = Math.random() < 0.5; if (!(f ? D.flatF : D.flatR)) { if (f) D.flatF = true; else D.flatR = true; this.events.push({ type: 'flat', car: c }); }
+      }
       if (c.status === 'racing') {
         if (D.temp > 150) { D.cook = (D.cook || 0) + dt; if (D.cook > 6) this.dnf(c, 'Przegrzany silnik'); } else D.cook = 0;
         if (D.engine >= 1) this.dnf(c, 'Silnik');
@@ -476,9 +776,15 @@
       let best = null;
       for (const [lx, ly] of [[hl, hw], [hl, -hw], [-hl, -hw], [-hl, hw]]) {
         const px = c.x + lx * cp - ly * sp, py = c.y + lx * sp + ly * cp;
-        const L = tr.toLocal(px, py);
-        let pen = L.d - tr.outerWall, sgn = -1;
-        if (pen <= 0) { pen = tr.innerWall - L.d; sgn = 1; }
+        const L = tr.toLocal(px, py, c.s);
+        let pen = L.d - tr.wallOut(L.s), sgn = -1;
+        if (pen <= 0) { pen = tr.wallIn(L.s) - L.d; sgn = 1; }
+        // murek oddzielający pit lane od toru
+        const P = tr.pit;
+        if (pen <= 0 && inRange(tr, L.s, P.wallA, P.wallB)) {
+          const w = P.side * P.wallD, cs = c.d > w ? 1 : -1;
+          if ((L.d - w) * cs < 0) { pen = Math.abs(L.d - w); sgn = cs; }
+        }
         if (pen > 0 && (!best || pen > best.pen)) best = { pen, px, py, s: L.s, sgn, lx, ly };
       }
       if (!best) return;
@@ -542,7 +848,7 @@
     }
 
     progress(c) {
-      const tr = this.track, L = tr.toLocal(c.x, c.y);
+      const tr = this.track, L = tr.toLocal(c.x, c.y, c.s);
       c.prog += tr.ds(c.s, L.s); c.s = L.s; c.d = L.d;
       if (this.phase === 'pace') return;
       const done = Math.floor(c.prog / tr.len);
@@ -554,6 +860,8 @@
           if (lt < c.bestLap) c.bestLap = lt;
         }
         c.lapStartT = this.t;
+        if (c.tireLap >= 0 && done >= 1) c.wearLap = c.tire - c.tireLap;
+        c.tireLap = c.tire;
         if (done > this.leaderLap) {
           this.leaderLap = done;
           if (done === this.laps - 1 && !this.opt.attract) this.events.push({ type: 'white' });
@@ -574,13 +882,68 @@
       car.hit = Math.max(0, car.hit - dt * 3); car.scrape = Math.max(0, car.scrape - dt * 4);
       this.walls(car);
       if (collide) for (const o of this.cars) if (o !== car && o.status !== 'out') this.carPair(car, o);
-      const L = tr.toLocal(car.x, car.y);
+      const L = tr.toLocal(car.x, car.y, car.s);
       car.prog += tr.ds(car.s, L.s); car.s = L.s; car.d = L.d;
+    }
+
+    // ─── pit stop ───
+    requestPit(c, on) {
+      if (!c || c.status !== 'racing' || c.pit || this.phase === 'pace') return false;
+      c.pitReq = on != null ? !!on : !c.pitReq;
+      this.events.push({ type: 'pitreq', car: c, on: c.pitReq });
+      return c.pitReq;
+    }
+    aiWantsPit(c) {
+      const rem = this.laps - c.prog / this.track.len, D = c.dmg, full = this.opt.damage === 'full';
+      if (rem < 1.3 && !this.opt.attract) return false;
+      if (full && (D.flatF || D.flatR)) return true;
+      if (full && D.health < 0.5 && rem > 3) return true;
+      if (!this.tireK) return false;
+      const per = c.wearLap || this.tireK * this.track.len * 0.75;
+      if (this.opt.attract) return c.tire > c.driver.pitAt * 0.85;
+      // bilans czasu: strata na zużytych oponach do mety kontra strata w alei; zjazd teraz albo okrążenie później
+      const lap = this.lapEst, risk = this.opt.damage === 'full' ? 25 : 0;
+      const loss = w => lap * (1 - Math.sqrt(tireGrip(w))) + (w > 1.15 ? risk : 0);
+      const n = Math.max(0, Math.round(rem - 0.5)), pitLoss = this.pitLoss * c.driver.pitAt;
+      // każdy zespół ma swoje okno (±1,5 okr.), żeby cała stawka nie zjeżdżała naraz
+      const w0 = c.tire + c.driver.pitBias * per * 1.5;
+      let stay = 0, now = pitLoss, next = pitLoss + loss(w0 + per);
+      for (let j = 1; j <= n; j++) { stay += loss(c.tire + per * j); now += loss(per * j); if (j < n) next += loss(per * j); }
+      return c.tire > 0.2 && now < stay && now <= next;
+    }
+    pitLogic(c) {
+      if (c.status !== 'racing' || this.phase === 'pace' || c.pit) return;
+      if (c.isPlayer && !c.tireWarn && c.tire > 0.75) { c.tireWarn = true; this.events.push({ type: 'tirewarn', car: c }); }
+      if (!c.isPlayer && !c.pitReq && this.aiWantsPit(c)) c.pitReq = true;
+      if (!c.pitReq) return;
+      const x = this.track.ds(c.s, this.track.pit.inS);
+      if (x > 15 + c.speed * 3 && x < 160 + c.speed * 5) {
+        c.pitReq = false; c.pit = { ph: 'in', t: 0, t0: this.t };
+        c.driver.pitStart();
+        this.events.push({ type: 'pitin', car: c });
+      }
+    }
+    serviceTime(c) {
+      const D = c.dmg, m = this.opt.damage;
+      let t = 10.5 + Math.random() * 1.8;
+      if (m === 'full') t += Math.min(12, (D.front + D.rear + D.left + D.right) * 5) + (D.flatF || D.flatR ? 1.5 : 0);
+      else if (m === 'simple') t += (1 - D.health) * 8;
+      return t;
+    }
+    applyService(c) {
+      const D = c.dmg;
+      c.tire = 0; c.tireLap = -1; c.pits++; c.tireWarn = false;
+      if (this.opt.damage === 'full') {
+        D.flatF = D.flatR = false; D.wearF = 0; D.toe *= 0.2; D.temp = Math.min(D.temp, 105);
+        for (const z of ['front', 'rear', 'left', 'right']) D[z] *= 0.35;
+        D.health = 1 - clamp((D.front + D.rear + D.left + D.right) / 3, 0, 1);
+      } else if (this.opt.damage === 'simple') D.health += (1 - D.health) * 0.7;
+      this.effects(c);
     }
 
     resetCar(c) {
       const tr = this.track;
-      const d = -tr.halfW - tr.apron * 0.5;
+      const d = tr.resetD();
       let s = c.s;
       // nie ustawiaj na innym aucie
       for (let k = 0; k < 20; k++) { if (!this.cars.some(o => o !== c && o.status !== 'out' && Math.abs(tr.ds(s, o.s)) < 9 && Math.abs(o.d - d) < 3)) break; s -= 10; }
@@ -588,7 +951,7 @@
       c.prog += tr.ds(c.s, s);
       c.x = p.x; c.y = p.y; c.psi = f.th; c.r = 0; c.s = s; c.d = d;
       const v0 = 18; c.vx = Math.cos(f.th) * v0; c.vy = Math.sin(f.th) * v0;
-      c.delta = 0; c.resets++; c.stuckT = 0;
+      c.delta = 0; c.resets++; c.stuckT = 0; c.pit = null;
       if (c.driver) c.driver.reset();
       this.events.push({ type: 'reset', car: c });
     }
@@ -664,7 +1027,7 @@
     constructor(car, race, skill) {
       this.car = car; this.race = race; this.skill = skill;
       const k = this.k = (skill - 1) / 9;
-      this.use = 0.9 + 0.08 * k;                   // wykorzystanie granicy przyczepności
+      this.use = (race.track.kind === 'road' ? 0.87 : 0.9) + 0.08 * k;   // wykorzystanie granicy przyczepności
       this.decel = 6.0 + 3.2 * k;                    // jak mocno odważy się hamować
       this.reaction = 0.42 - 0.3 * k;                // czas reakcji na ruch
       this.laneRate = 2.2 + 1.6 * k;                 // tempo zmiany pasa [m/s]
@@ -678,8 +1041,11 @@
       const names = race.track.id === 'speedway' ? ['bottom', 'bottom', 'second', 'top'] : Object.keys(lines);
       const best = race.track.id === 'speedway' ? 'bottom' : race.bestLine;
       this.lineName = Math.random() < 0.3 + 0.7 * k ? best : names[Math.floor(Math.random() * names.length)];
+      this.pitAt = 0.85 + Math.random() * 0.4;        // jak ostrożnie zespół liczy stratę w boksie (rozrzut strategii)
+      this.pitBias = Math.random() * 2 - 1;
       this.reset();
     }
+    pitStart() { this.reset(); this.mode = 'pit'; }
     reset() {
       this.mode = 'line'; this.lane = null; this.passCar = null; this.decT = 0; this.modeT = 0;
       this.dS = this.car.d; this.lo = -99; this.hi = 99; this.mistake = 0; this.mistakeT = 0; this.blockT = 0; this.t = 0; this.followV = 999;
@@ -693,6 +1059,7 @@
       this.t += dt;
       if (c.status === 'dnf') { c.cmd.throttle = 0; c.cmd.brake = 0.35; c.cmd.delta = 0; return; }
       if (race.phase === 'pace') return this.pace(dt);
+      if (c.pit) return this.pitDrive(dt);
       // zablokowany / obrócony → reset
       const f = tr.frame(c.s), head = angDiff(c.psi, f.th);
       if ((c.speed < 4 || Math.abs(head) > 1.9) && c.status === 'racing') { c.stuckT += dt; if (c.stuckT > 2.5) return race.resetCar(c); } else c.stuckT = 0;
@@ -708,8 +1075,14 @@
       dT = this.sideLimit(dT);
       // w łuku zjazd w dół (zacieśnianie promienia) tylko powoli; na zewnątrz swobodniej
       const turn = tr.inTurn(c.s);
-      const lrDown = this.laneRate * (turn ? 0.3 : 1), lrUp = this.laneRate * (turn ? 0.7 : 1);
-      this.dS += clamp(dT - this.dS, -lrDown * dt, lrUp * dt);
+      if (tr.kind === 'road') {
+        // na torze drogowym linia wyścigowa sama przechodzi od krawędzi do krawędzi — nadążaj za nią
+        const r = this.lane == null ? 10 : this.laneRate * (turn ? 0.6 : 1);
+        this.dS += clamp(dT - this.dS, -r * dt, r * dt);
+      } else {
+        const lrDown = this.laneRate * (turn ? 0.3 : 1), lrUp = this.laneRate * (turn ? 0.7 : 1);
+        this.dS += clamp(dT - this.dS, -lrDown * dt, lrUp * dt);
+      }
       this.dS = clamp(this.dS, Math.min(this.lo, this.hi), Math.max(this.lo, this.hi));
       this.steer(dt);
       this.speed(dt);
@@ -717,7 +1090,7 @@
 
     sideLimit(dT) {
       const c = this.car, tr = this.race.track;
-      let lo = -tr.halfW - 2, hi = tr.halfW - 1.1; this.hiCar = false;
+      let lo = tr.kind === 'road' ? -tr.halfW + 1.1 : -tr.halfW - 2, hi = tr.halfW - 1.1; this.hiCar = false;
       for (const o of this.race.cars) {
         if (o === c || o.status === 'out') continue;
         const ds = tr.ds(c.s, o.s), dd = o.d - c.d;
@@ -868,7 +1241,7 @@
       const over = c.r - rDes;
       if (Math.abs(over) > 0.05) dl -= (0.2 + 0.25 * this.k) * (over - Math.sign(over) * 0.05);
       dl += this.noiseAmp * (Math.sin(this.t * 1.7 + this.ph[0]) * 0.7 + Math.sin(this.t * 4.3 + this.ph[1]) * 0.3);
-      const dmax = Math.max(0.05, 0.5 / (1 + u / 7));
+      const dmax = Math.max(0.05, (tr.kind === 'road' ? 0.62 : 0.5) / (1 + u / 7));
       c.cmd.delta = clamp(dl, -dmax, dmax);
     }
 
@@ -876,10 +1249,7 @@
       const c = this.car, race = this.race, tr = race.track, k = this.k;
       const u = c.u;
       let vt = 999;
-      const grip = Math.min(c.fx.gripF, c.fx.gripR);
-      // brudne powietrze / auto tuż za tylnym zderzakiem zabierają docisk — dobry kierowca to czuje i odpuszcza
-      const aeroLoss = (0.25 + 0.2 * k) * Math.max(c.dirty, c.aeroLoose);
-      const gs = Math.sqrt(grip * (0.7 + 0.3 * c.fx.df)) * (1 - aeroLoss);
+      const gs = this.gripScale();
       const horizon = Math.max(60, u * u / (2 * this.decel) + 40);
       for (let x = 0; x <= horizon; x += 8) {
         const v = this.vlim(c.s + x) * this.use * gs;
@@ -903,24 +1273,119 @@
         const gap = tr.ds(c.s, this.passCar.s) - CAR.length;
         if (gap > -2 && gap < 12) { const room = gap - lerp(3, 0.5, k); vt = Math.min(vt, this.passCar.speed + (room > 0 ? Math.sqrt(2 * 4 * room) : room * 1.5)); }
       }
-      const err = vt - u;
-      let th, br = 0;
-      if (err > 2) th = 1;
-      else if (err > -0.6) th = clamp(0.3 + err * (0.3 + 0.2 * k), 0, 1);
-      else {
-        th = 0; br = clamp((-err - 0.6) * (0.08 + 0.1 * k), 0, 1);
-        const lat = c.capR ? Math.abs(c.fyR) / c.capR : 0;           // hamowanie w zakręcie: zostaw oponom zapas na skręt
-        br = Math.min(br, Math.sqrt(Math.max(0, 1 - lat * lat)) * (0.75 + 0.25 * k) + 0.08);
-      }
-      th = Math.min(th, tractionThrottle(race, c, 0.8 + 0.17 * k));
-      if (Math.abs(c.slipR) > PEAK_SLIP * (1.1 - 0.2 * k)) th *= 0.5;
+      let [th, br] = this.pedals(vt);
       // auto wypycha na zewnątrz ponad zamierzoną linię (push) — odpuść gaz, zwłaszcza gdy ktoś jedzie wyżej
       const push = c.d - this.dS;
-      if (push > 0.25 && tr.inTurn(c.s) && this.hiCar && this.hi - c.d < 1.5) {
+      if (tr.kind === 'road') {
+        // ucieka na zewnątrz łuku albo przód jest za szczytem przyczepności (podsterowność) — odpuść gaz
+        const kk = tr.kappa(c.s, c.d), wide = (c.d - this.dS) * Math.sign(kk);
+        if (kk && wide > 0.6) th *= clamp(1 - (wide - 0.6) * 0.8, 0, 1);
+        if (Math.abs(c.slipF) > PEAK_SLIP * 1.15) th *= 0.35;
+      } else if (push > 0.25 && tr.inTurn(c.s) && this.hiCar && this.hi - c.d < 1.5) {
         th *= clamp(1 - (push - 0.25) * (1.5 + 3 * k), 0, 1);
       }
       if (this.mistake > 0) { th *= 0.25; }
       c.cmd.throttle = th; c.cmd.brake = br;
+    }
+
+    // prędkość docelowa → gaz / hamulec
+    pedals(vt) {
+      const c = this.car, k = this.k, err = vt - c.u;
+      let th, br = 0;
+      if (err > 2) th = 1;
+      else if (err > -0.6) th = clamp(0.3 + err * (0.3 + 0.2 * k), 0, 1);
+      else {
+        th = 0; br = clamp((-err - 0.6) * (this.race.track.kind === 'road' ? 0.3 + 0.2 * k : 0.08 + 0.1 * k), 0, 1);
+        const lat = c.capR ? Math.abs(c.fyR) / c.capR : 0;           // hamowanie w zakręcie: zostaw oponom zapas na skręt
+        br = Math.min(br, Math.sqrt(Math.max(0, 1 - lat * lat)) * (0.75 + 0.25 * k) + 0.08);
+      }
+      th = Math.min(th, tractionThrottle(this.race, c, 0.8 + 0.17 * k));
+      if (Math.abs(c.slipR) > PEAK_SLIP * (1.1 - 0.2 * k)) th *= 0.5;
+      br = Math.min(br, brakeLimit(c, 0.9 + 0.08 * k));
+      return [th, br];
+    }
+    // prędkość, z której zdążę wyhamować przed każdym łukiem pasa d
+    // mnożnik prędkości w łuku: zużycie opon, uszkodzenia, brudne powietrze — dobry kierowca to czuje i odpuszcza
+    gripScale() {
+      const c = this.car, grip = Math.min(c.fx.gripF, c.fx.gripR);
+      const aeroLoss = (0.25 + 0.2 * this.k) * Math.max(c.dirty, c.aeroLoose);
+      return Math.sqrt(grip * (0.7 + 0.3 * c.fx.df)) * (1 - aeroLoss);
+    }
+    horizonV(d) {
+      const c = this.car, u = c.u, gs = this.gripScale(); let vt = 999;
+      const horizon = Math.max(60, u * u / (2 * this.decel) + 40);
+      for (let x = 0; x <= horizon; x += 8) { const v = this.race.vLane(c.s + x, d) * this.use * gs; vt = Math.min(vt, Math.sqrt(v * v + 2 * this.decel * x)); }
+      return vt;
+    }
+
+    // Autopilot w alei serwisowej (również dla gracza): zjazd, limiter, boks, serwis, powrót na tor.
+    pitDrive(dt) {
+      const c = this.car, race = this.race, tr = race.track, P = tr.pit, p = c.pit, sd = P.side;
+      const box = P.boxS[c.pitBox % P.boxS.length], toBox = tr.ds(c.s, box), onRoad = inRange(tr, c.s, P.inS, P.outS);
+      this.t += dt; this.lo = -99; this.hi = 99;
+      if (p.ph === 'stop') {
+        c.cmd.throttle = 0; c.cmd.brake = 1; c.cmd.delta = 0;
+        p.t -= dt;
+        if (p.t <= 0) { race.applyService(c); p.ph = 'out'; race.events.push({ type: 'pitout', car: c, t: race.t - p.t0 }); }
+        return;
+      }
+      // obrócony / na trawie / zakleszczony — reset (zjazd ponowiony na następnym okrążeniu)
+      const head = Math.abs(angDiff(c.psi, tr.frame(c.s).th));
+      p.spin = head > 1.2 || tr.surface(c.s, c.d) === 2 ? (p.spin || 0) + dt : 0;
+      if (p.spin > 2.5 || (p.stuck || 0) > 10) { const again = p.ph === 'in'; race.resetCar(c); c.pitReq = again; return; }
+      let dT, vt, rate = 5;
+      const spacing = Math.abs(P.boxS[1] - P.boxS[0]);
+      if (p.ph === 'in') {
+        const toIn = tr.ds(c.s, P.inS);
+        // przed wjazdem: linia wyścigowa, a na ostatnich metrach dolny pas toru (nie apron — w przechylonym łuku przy pełnej prędkości auto by go nie utrzymało)
+        if (!onRoad) { dT = toIn > Math.max(tr.kind === 'road' ? 170 : 220, c.u * 6.5) ? this.lineD(c.s + 15) : sd * (tr.halfW - 1.4); rate = 3.5; }
+        else dT = sd * (toBox < Math.min(28, spacing * 0.85) ? P.boxD : P.driveD);
+        // hamowanie do limitera dopiero poza nawierzchnią wyścigową — nie w środku pociągu (chyba że zabrakłoby drogi)
+        const toLine = tr.ds(c.s, P.lineA), lim2 = P.limit * P.limit, need = (c.u * c.u - lim2) / 19;
+        let vb = toLine > 0 ? Math.sqrt(lim2 + 2 * 8 * toLine) : P.limit;
+        if (c.d * sd < tr.halfW + 0.3 && toLine > need + 15) vb = 999;
+        // krótki odcinek wjazdu przed murkiem: zwolnij już przed wjazdem, żeby zdążyć zjechać w bok
+        const vIn = tr.ds(P.inS, P.wallA) / 4.5;
+        if (toIn > -5 && vIn < 60) vb = Math.min(vb, Math.sqrt(vIn * vIn + 2 * 6 * Math.max(0, toIn)));
+        vt = Math.min(this.horizonV(clamp(this.dS, -tr.halfW, tr.halfW)), this.horizonV(clamp(dT, -tr.halfW, tr.halfW)), vb);
+        // nie zdążył przejechać przed murkiem alei — objazd i próba na następnym okrążeniu
+        if (inRange(tr, c.s, P.wallA, P.wallB) && c.d * sd < P.wallD) { c.pit = null; c.pitReq = true; this.reset(); return this.update(0); }
+        // zatrzymanie tylko na stanowisku (w pasie stanowisk), nigdy w pasie jazdy
+        const inBox = Math.abs(c.d - sd * P.boxD) < 1.4;
+        // minięte stanowisko (zablokowane przez sąsiada) — serwis w najbliższym wolnym miejscu pasa stanowisk
+        if (onRoad) vt = Math.min(vt, toBox < -1 ? (inBox ? 0 : 5) : Math.max(inBox ? 0 : 2.5, Math.sqrt(2 * 4 * Math.max(0, toBox - 0.4))));
+        if (onRoad && tr.ds(P.lineB, c.s) > 0) { p.ph = 'out'; c.pitReq = true; }
+        else if (onRoad && inBox && c.speed < 1.5 && toBox < 1.3) {
+          p.ph = 'stop'; p.t = race.serviceTime(c); p.stopT = race.t;
+          race.events.push({ type: 'pitstop', car: c, t: p.t });
+        }
+      } else {
+        const past = tr.ds(P.lineB, c.s) > 0;
+        dT = past ? sd * (tr.halfW - 1.4) : sd * (toBox > -3 ? P.boxD : P.driveD);
+        rate = past ? 3 : 4;
+        vt = past ? this.horizonV(this.dS) : Math.min(P.limit, 3 + Math.max(0, -toBox) * 0.8);
+        if (past && (Math.abs(c.d) < tr.halfW - 0.3 || tr.ds(P.outS, c.s) > 120)) { c.pit = null; this.reset(); return this.update(0); }
+      }
+      // nie wjeżdżaj w auto przed sobą (droga hamowania, nie stały odstęp) i nie zjeżdżaj w bok na auto obok;
+      // po kilku sekundach stania w miejscu — przepchnij się
+      p.stuck = c.speed < 1 ? (p.stuck || 0) + dt : 0;
+      let side = false;
+      if (p.stuck < 6) for (const o of race.cars) {
+        if (o === c || o.status === 'out') continue;
+        const g = tr.ds(c.s, o.s) - CAR.length;
+        if (g > -CAR.length + 1 && g < 90 && Math.abs(o.d - c.d) < 2.4) vt = Math.min(vt, g > 4 ? Math.sqrt(o.speed * o.speed + 2 * 6 * (g - 4)) : o.speed * 0.5);
+        if (Math.abs(g + CAR.length) < CAR.length + 2.5 && (o.d - c.d) * (dT - c.d) > 0 && Math.abs(o.d - c.d) < 3.2 && Math.abs(dT - c.d) > 0.5) side = true;
+      }
+      this.lane = dT;
+      // przy dużej prędkości zmiana pasa łagodna; cel nie wyprzedza auta o więcej niż 3 m (ale nigdy nie ciągnie się za nim)
+      rate = Math.min(rate, 1.2 + 80 / Math.max(10, c.u));
+      const lead = this.dS - c.d;
+      // auto nie nadąża w bok (na granicy przyczepności) — odpuść, zamiast jechać prosto w murek alei
+      const lift = (dT - c.d) * lead > 0 && Math.abs(lead) > 2.2 && c.u > 8;
+      if (!side && !((dT - this.dS) * lead > 0 && Math.abs(lead) > 3)) this.dS += clamp(dT - this.dS, -rate * dt, rate * dt);
+      this.steer(dt);
+      [c.cmd.throttle, c.cmd.brake] = this.pedals(vt);
+      if (lift) c.cmd.throttle = 0;
     }
 
     pace(dt) {
@@ -941,7 +1406,13 @@
     const fx = Math.sqrt(Math.max(0, (c.capR * util) ** 2 - c.fyR * c.fyR));
     return clamp(fx / driveForce(race.track, c.u, c.fx.power), 0.05, 1);
   }
+  // hamulec, przy którym tylna oś zostaje w kole tarcia (hamowanie w zakręcie bez obracania auta)
+  function brakeLimit(c, util) {
+    if (!c.capR || !c.capF) return 1;
+    const fx = Math.sqrt(Math.max(0, (c.capR * util) ** 2 - c.fyR * c.fyR));
+    return clamp(fx / (CAR.brakeMu * (c.capF + c.capR) * (1 - CAR.brakeFront)), 0.12, 1);
+  }
   function angDiff(a, b) { let d = a - b; while (d > PI) d -= 2 * PI; while (d < -PI) d += 2 * PI; return d; }
 
-  return { TRACKS, ROSTER, Track, Race, Car, Driver, CAR, SUB, cornerSpeed, PEAK_SLIP, clamp, lerp, mod, angDiff, shuffle };
+  return { TRACKS, ROSTER, Track, PathTrack, makeTrack, Race, Car, Driver, CAR, SUB, cornerSpeed, PEAK_SLIP, clamp, lerp, mod, angDiff, shuffle };
 });
