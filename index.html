@@ -2003,7 +2003,7 @@
   // Pozostałe auta są ekstrapolowane wzdłuż toru do tej samej chwili, w której jest własne auto.
   // Dwa kanały: WebRTC (PeerJS, bezpośrednio) i przekaźnik MQTT (publiczne brokery przez WebSocket) — ten drugi
   // działa, gdy NAT (sieć komórkowa, CGNAT) blokuje połączenie bezpośrednie. Oba udają DataConnection z PeerJS.
-  const PROTO = 2, ROOM = 'slipstream500-', CODE_CH = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', MAXP = 8;
+  const PROTO = 3, ROOM = 'slipstream500-', CODE_CH = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', MAXP = 8;
   const SNAP_HZ = 25, SNAP_RELAY = 20, IN_HZ = 60, IN_RELAY = 30;   // paczki stanu / wejścia gościa na sekundę
   const RELAY_NS = 's500/2/';   // tematy: <ns><KOD>/h (skrzynka gospodarza), <ns><KOD>/g/<id> (skrzynka gościa)
   const BROKERS = ['wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081/mqtt', 'wss://broker.emqx.io:8084/mqtt'];
@@ -2026,12 +2026,13 @@
   const cleanName = n => String(n || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 14) || 'Gracz';
   const myName = () => cleanName(cfg.name || (net.mode === 'host' ? 'Gospodarz' : 'Gracz'));
   const plural = n => n === 1 ? 'gracz' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'gracze' : 'graczy';
-  const viaName = v => v === 'relay' ? 'przekaźnik' : 'P2P';
+  const viaName = (v, turn) => v === 'relay' ? 'przekaźnik' : turn ? 'P2P · TURN' : 'P2P';
   Object.assign(net, { seq: 0, inputs: [], predAcc: 0, predicting: false, evIn: [], sendT: 0, pingT: 0, lobbyT: 0, hostT: 0, hostArr: null, rtt0: false,
     join: null, hs: null, relay: [], rconns: new Map() });
 
   function netStatus(text) { $('#netStatus').textContent = text || ''; }
   function netSend(m) { if (net.host && net.host.open) net.host.send(m); }
+  function netSendFast(m) { if (net.host && net.host.open) net.host.sendFast(m); }
   function netBroadcast(m) { for (const g of net.guests.values()) if (g.conn.open) g.conn.send(m); }
 
   // ─── transport: wspólny interfejs send / open / close / peer / kind / on('data' | 'close' | 'error') ───
@@ -2041,15 +2042,41 @@
     // wyjątek w obsłudze wiadomości nie może zerwać połączenia
     emit(ev, a) { for (const fn of this.h[ev] || []) try { fn(a); } catch (e) { console.warn('[online]', ev, e); } }
   }
+  // Obok kanału PeerJS (niezawodny, z zachowaniem kolejności) drugi kanał na tym samym połączeniu: bez kolejności i bez
+  // retransmisji, jak UDP. Idą nim paczki stanu, sterowanie i ping — w kanale niezawodnym jedna zgubiona paczka wstrzymuje
+  // wszystkie następne, dopóki nie dotrze jej powtórka (skoki pingu o setki ms na Wi-Fi). Kanał „negocjowany” (ten sam id
+  // po obu stronach) nie wymaga dodatkowej wymiany ofert.
+  const FAST_ID = 64, FAST_BUF = 16384;
   function p2pConn(dc) {
     const c = new Conn(dc.peer, 'p2p');
-    let shut = false;
+    let shut = false, fast = null;
     Object.defineProperty(c, 'open', { get: () => dc.open });
     c.send = m => { try { dc.send(m); } catch (e) { console.warn('[online] send', e); } };
-    c.close = () => { try { dc.close(); } catch (e) { /* już zamknięte */ } };
-    dc.on('open', () => c.emit('open'));
+    c.sendFast = m => {
+      if (!fast || fast.readyState !== 'open') return c.send(m);
+      if (fast.bufferedAmount > FAST_BUF) return;   // łącze zapchane — paczkę pomijamy, zamiast ustawiać w kolejce; następna będzie świeższa
+      try { fast.send(JSON.stringify(m)); } catch (e) { c.send(m); }
+    };
+    c.close = () => { try { if (fast) fast.close(); dc.close(); } catch (e) { /* już zamknięte */ } };
+    c.turn = false;   // czy połączenie idzie przez serwer TURN (pośrednik), a nie bezpośrednio
+    c.route = async () => {
+      const pc = dc.peerConnection; if (!pc) return;
+      const st = await pc.getStats(); let pair = null;
+      st.forEach(r => { if (r.type === 'transport' && r.selectedCandidatePairId) pair = st.get(r.selectedCandidatePairId); });
+      if (!pair) st.forEach(r => { if (r.type === 'candidate-pair' && (r.selected || r.nominated && r.state === 'succeeded')) pair = pair || r; });
+      if (!pair) return;
+      const l = st.get(pair.localCandidateId), r = st.get(pair.remoteCandidateId);
+      c.turn = !!(l && l.candidateType === 'relay' || r && r.candidateType === 'relay');
+    };
+    dc.on('open', () => {
+      try {
+        fast = dc.peerConnection.createDataChannel('s500-fast', { negotiated: true, id: FAST_ID, ordered: false, maxRetransmits: 0 });
+        fast.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch (err) { return; } c.emit('data', m); };
+      } catch (e) { console.warn('[online] kanał bez retransmisji', e); fast = null; }
+      c.emit('open');
+    });
     dc.on('data', m => c.emit('data', m));
-    dc.on('close', () => { if (!shut) { shut = true; c.emit('close'); } });
+    dc.on('close', () => { if (fast) try { fast.close(); } catch (e) { /* już zamknięty */ } if (!shut) { shut = true; c.emit('close'); } });
     dc.on('error', e => c.emit('error', e));
     return c;
   }
@@ -2059,6 +2086,7 @@
     get open() { return !this.closed && this.cli.connected; }
     pub(o) { try { this.cli.publish(this.tx, JSON.stringify(o), { qos: 0 }); } catch (e) { console.warn('[przekaźnik] publish', e); } }
     send(m) { if (this.open) this.pub({ f: this.me, m }); }
+    sendFast(m) { this.send(m); }
     close() { if (this.closed) return; if (this.cli.connected) this.pub({ f: this.me, x: 1 }); this.closed = true; this.emit('close'); }
     rx(o) { if (this.closed) return; if (o.x) { this.closed = true; this.emit('close'); } else if (o.m && typeof o.m === 'object') this.emit('data', o.m); }
   }
@@ -2109,7 +2137,7 @@
     $('#roomCode').textContent = net.code || '…';
     $('#plist').innerHTML = net.players.map(p => `<li><span class="chip" style="background:${p.color};color:${textColor(p.color)}">${p.number}</span>` +
       `<span>${esc(p.name)} <em>${p.host ? '· gospodarz' : ''}${p.id === net.myId ? ' · ty' : ''}</em></span>` +
-      `<span class="ping">${!p.host && p.rtt != null ? Math.round(p.rtt * 1000) + ' ms' : ''}${!p.host && p.via ? `<small>${viaName(p.via)}</small>` : ''}</span></li>`).join('');
+      `<span class="ping">${!p.host && p.rtt != null ? Math.round(p.rtt * 1000) + ' ms' : ''}${!p.host && p.via ? `<small>${viaName(p.via, p.turn)}</small>` : ''}</span></li>`).join('');
     const n = net.players.length;
     if (net.mode === 'host') {
       $('#netNote').textContent = `Znajomi wpisują kod ${net.code} w polu „Dołącz” (muszą mieć tę samą wersję gry). Stawka: ${n} ${plural(n)}` +
@@ -2260,7 +2288,7 @@
       case 'reset': { const c = carOf(g.p.id); if (c && canReset(c)) race.resetCar(c); break; }
       case 'set': g.p.assists = m.assists !== false; break;
       case 'pit': { const c = carOf(g.p.id); if (c) race.requestPit(c, !!m.on); break; }
-      case 'ping': conn.send({ t: 'pong', c: m.c }); if (typeof m.rtt === 'number') g.p.rtt = m.rtt; break;
+      case 'ping': conn.sendFast({ t: 'pong', c: m.c }); if (typeof m.rtt === 'number') g.p.rtt = m.rtt; g.p.turn = m.turn === 1; break;
     }
   }
   function hostDrop(conn) {
@@ -2300,7 +2328,8 @@
       if (force || g.snapN++ % 5 === 0 || g.evq.length) m.sl = sl = sl || race.cars.map(c => ({ dm: c.dmg, fx: c.fx, ps: c.pits, ll: c.lastLap, bl: isFinite(c.bestLap) ? c.bestLap : null,
         n: c.laps.length, ft: c.finishT, fp: c.finishPos, dr: c.dnfReason, dt: c.dnfT, ip: c.isPlayer }));
       if (g.evq.length) { m.e = g.evq; g.evq = []; }
-      g.conn.send(m);
+      // sama pozycja aut — kanałem bez retransmisji; dane wolnozmienne i zdarzenia nie mogą zginąć
+      if (m.sl || m.e) g.conn.send(m); else g.conn.sendFast(m);
     }
   }
   function hostAfterUpdate(dt) {
@@ -2439,13 +2468,18 @@
   const DISP = ['delta', 'throttle', 'brake', 'u', 'speed', 'slipF', 'slipR', 'wheelspin', 'hit', 'scrape', 'latG', 'lonG', 'axf'];
   function guestSnap(m) {
     const now = nowS(), me = race.player;
-    net.hostT = m.T; net.hostArr = now;
-    race.phase = m.ph; race.greenT = m.gT; race.leaderLap = m.ll; race.finishedCount = m.fc; race.firstFinishT = m.ff == null ? undefined : m.ff;
+    if (m.e) for (const e of m.e) net.evIn.push({ type: e.type, car: race.cars[e.car], a: race.cars[e.a], b: race.cars[e.b], v: e.v, why: e.why });
+    // paczki przychodzą dwoma kanałami i bez gwarancji kolejności — ze starszej bierzemy tylko zdarzenia i dane wolnozmienne
+    // (cofnięcie czasu o kilka sekund to już nowy wyścig)
+    const old = net.hostArr != null && m.T < net.hostT && net.hostT - m.T < 5;
+    if (!old) { net.hostT = m.T; net.hostArr = now; }
     if (m.sl) m.sl.forEach((o, i) => {
       const c = race.cars[i]; if (!c) return;
       Object.assign(c, { dmg: o.dm, fx: o.fx, pits: o.ps || 0, lastLap: o.ll, bestLap: o.bl == null ? Infinity : o.bl, finishT: o.ft, finishPos: o.fp, dnfReason: o.dr, dnfT: o.dt, isPlayer: o.ip });
       c.laps.length = o.n;
     });
+    if (old) return;
+    race.phase = m.ph; race.greenT = m.gT; race.leaderLap = m.ll; race.finishedCount = m.fc; race.firstFinishT = m.ff == null ? undefined : m.ff;
     m.c.forEach((a, i) => {
       const c = race.cars[i]; if (!c) return;
       const b = {}; F.forEach((k, j) => { b[k] = a[j]; });
@@ -2468,7 +2502,6 @@
       c.x += c.net.ox; c.y += c.net.oy; c.psi += c.net.op;
     });
     race.order = race.cars.slice().sort((a, b) => a.pos - b.pos);
-    if (m.e) for (const e of m.e) net.evIn.push({ type: e.type, car: race.cars[e.car], a: race.cars[e.a], b: race.cars[e.b], v: e.v, why: e.why });
   }
   // własne auto: stan gospodarza + ponowne odtworzenie niepotwierdzonych wejść
   function reconcile(c, b, ack) {
@@ -2509,7 +2542,7 @@
         if (net.inputs.length > 90) net.inputs.splice(0, net.inputs.length - 90);
       }
       net.sendT -= dt;
-      if (net.sendT <= 0) { net.sendT = 1 / (net.host && net.host.kind === 'relay' ? IN_RELAY : IN_HZ); netSend({ t: 'in', q: net.seq, s: r3(p.ctl.steer), a: r3(p.ctl.throttle), b: r3(p.ctl.brake) }); }
+      if (net.sendT <= 0) { net.sendT = 1 / (net.host && net.host.kind === 'relay' ? IN_RELAY : IN_HZ); netSendFast({ t: 'in', q: net.seq, s: r3(p.ctl.steer), a: r3(p.ctl.throttle), b: r3(p.ctl.brake) }); }
       if (pred && !stale) {
         net.predAcc += dt;
         while (net.predAcc >= Sim.SUB) { race.predict(p, Sim.SUB, true); net.predAcc -= Sim.SUB; }
@@ -2532,8 +2565,13 @@
     if (net.mode === 'host') for (const g of [...net.guests.values()]) if (now - g.lastRx > 10) { try { g.conn.close(); } catch (e) { /* już zamknięte */ } hostDrop(g.conn); }
     if (net.mode === 'guest') {
       net.pingT -= dt;
-      if (net.pingT <= 0) { net.pingT = 1; netSend({ t: 'ping', c: nowS(), rtt: net.rtt0 ? r3(net.rtt) : undefined }); }
-      if (state === 'race' && net.rtt0) { const el = $('#hNet'), txt = `Ping <b>${Math.round(net.rtt * 1000)} ms</b> · ${viaName(net.host && net.host.kind)}`; if (el.innerHTML !== txt) el.innerHTML = txt; }
+      if (net.pingT <= 0) {
+        net.pingT = 1;
+        const h = net.host;
+        netSendFast({ t: 'ping', c: nowS(), rtt: net.rtt0 ? r3(net.rtt) : undefined, turn: h && h.turn ? 1 : undefined });
+        if (h && h.route) h.route().catch(() => {});
+      }
+      if (state === 'race' && net.rtt0) { const h = net.host, el = $('#hNet'), txt = `Ping <b>${Math.round(net.rtt * 1000)} ms</b> · ${viaName(h && h.kind, h && h.turn)}`; if (el.innerHTML !== txt) el.innerHTML = txt; }
     } else if (net.mode === 'host' && state === 'menu') {
       net.lobbyT -= dt;
       if (net.lobbyT <= 0) { net.lobbyT = 2; renderNet(); }
