@@ -906,6 +906,7 @@
       seats.push({ x: a.x, y: (k + 1) * RH, z: -a.y, yaw: Math.atan2(b.y - a.y, b.x - a.x), s: s1 });
     }
     const crowd = buildCrowd(seats); G.add(crowd.group);
+    if (!road) G.add(buildCampers(tr));
     // kamery telewizyjne dookoła toru: na drogowym po zewnętrznej stronie najbliższego łuku
     const tv = [], nTv = road ? Math.round(tr.len / 280) : 10;
     for (let i = 0; i < nTv; i++) {
@@ -939,27 +940,24 @@
       g.fillStyle = 'rgba(10,14,20,.55)'; g.beginPath(); g.ellipse(cx, cy - 40, 54, 16, 0, 0, 7); g.fill();   // cień powieki
     }
   });
-  const crowdGeo = (() => {
-    const sh = new THREE.Shape();
-    sh.moveTo(-0.95, 0.2); sh.lineTo(0.9, 0.2); sh.quadraticCurveTo(1.0, 0.22, 0.99, 0.42); sh.lineTo(0.9, 0.56); sh.lineTo(0.42, 0.62);
-    sh.lineTo(0.14, 0.97); sh.quadraticCurveTo(-0.2, 1.05, -0.55, 0.98); sh.quadraticCurveTo(-0.9, 0.9, -0.97, 0.55); sh.lineTo(-0.97, 0.26); sh.closePath();
-    const shell = new THREE.ExtrudeGeometry(sh, { depth: 1.1, bevelEnabled: false, curveSegments: 3 }); shell.translate(0, 0, -0.55);
-    const parts = [[shell, [1, 1, 1]], [new THREE.BoxGeometry(0.1, 0.12, 1.04).translate(0.99, 0.3, 0), [0.25, 0.25, 0.25]]];
-    for (const x of [-0.6, 0.6]) for (const z of [-0.52, 0.52]) parts.push([new THREE.BoxGeometry(0.38, 0.38, 0.14).translate(x, 0.19, z), [0.06, 0.06, 0.06]]);
-    // kolor wierzchołków mnożony przez kolor egzemplarza: karoseria bierze kolor widza, koła i zderzak zostają ciemne
+  // postać-pojazd: bryła z profilu bocznego + części (kolor wierzchołków mnożony przez kolor egzemplarza: karoseria bierze kolor
+  // egzemplarza, koła i szyby zostają ciemne), osobno szyba z oczami i uśmiech na zderzaku z atlasu T.eyes
+  function critterGeo(profile, depth, parts, gl, mo) {
+    const sh = new THREE.Shape(); profile(sh);
+    const shell = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: false, curveSegments: 3 }); shell.translate(0, 0, -depth / 2);
     const pos = [], nor = [], col = [];
-    for (const [g0, c] of parts) {
+    for (const [g0, c] of [[shell, [1, 1, 1]]].concat(parts)) {
       const g = g0.index ? g0.toNonIndexed() : g0, p = g.attributes.position.array, n = g.attributes.normal.array;
       for (let i = 0; i < p.length; i++) { pos.push(p[i]); nor.push(n[i]); }
       for (let i = 0; i < p.length / 3; i++) col.push(c[0], c[1], c[2]);
     }
     const body = new THREE.BufferGeometry();
     body.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); body.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); body.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-    // szyba z oczami: płaszczyzna położona na pochyłości od (0.42, 0.62) do (0.14, 0.97)
-    const glass = new THREE.PlaneGeometry(1.0, 0.42), up = new THREE.Vector3(-0.28, 0.35, 0).normalize(), out = new THREE.Vector3(up.y, -up.x, 0);
+    // szyba: płaszczyzna na pochyłości od dolnej krawędzi (gl[0], gl[1]) do górnej (gl[2], gl[3])
+    const [x0, y0, x1, y1, gw, gh] = gl, glass = new THREE.PlaneGeometry(gw, gh), up = new THREE.Vector3(x1 - x0, y1 - y0, 0).normalize(), out = new THREE.Vector3(up.y, -up.x, 0);
     glass.applyMatrix4(new THREE.Matrix4().makeBasis(new THREE.Vector3(0, 0, -1), up, out));
-    glass.translate(0.28 + out.x * 0.012, 0.795 + out.y * 0.012, 0);
-    const mouth = new THREE.PlaneGeometry(0.66, 0.22).rotateY(Math.PI / 2).translate(1.046, 0.33, 0);
+    glass.translate((x0 + x1) / 2 + out.x * 0.012, (y0 + y1) / 2 + out.y * 0.012, 0);
+    const mouth = new THREE.PlaneGeometry(mo[2], mo[3]).rotateY(Math.PI / 2).translate(mo[0], mo[1], 0);
     const ep = [], eu = [];
     for (const [g0, v0] of [[glass, 0.5], [mouth, 0]]) {
       const g = g0.toNonIndexed(), p = g.attributes.position.array, u = g.attributes.uv.array;
@@ -969,22 +967,45 @@
     const eyes = new THREE.BufferGeometry();
     eyes.setAttribute('position', new THREE.Float32BufferAttribute(ep, 3)); eyes.setAttribute('uv', new THREE.Float32BufferAttribute(eu, 2));
     return { body, eyes };
+  }
+  const box = (w, h, d, x, y, z) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
+  const crowdGeo = critterGeo(sh => {
+    sh.moveTo(-0.95, 0.2); sh.lineTo(0.9, 0.2); sh.quadraticCurveTo(1.0, 0.22, 0.99, 0.42); sh.lineTo(0.9, 0.56); sh.lineTo(0.42, 0.62);
+    sh.lineTo(0.14, 0.97); sh.quadraticCurveTo(-0.2, 1.05, -0.55, 0.98); sh.quadraticCurveTo(-0.9, 0.9, -0.97, 0.55); sh.lineTo(-0.97, 0.26); sh.closePath();
+  }, 1.1, [[box(0.1, 0.12, 1.04, 0.99, 0.3, 0), [0.25, 0.25, 0.25]]].concat([-0.6, 0.6].flatMap(x => [-0.52, 0.52].map(z => [box(0.38, 0.38, 0.14, x, 0.19, z), [0.06, 0.06, 0.06]]))),
+  [0.42, 0.62, 0.14, 0.97, 1.0, 0.42], [1.046, 0.33, 0.66, 0.22]);
+  // kamper z nadbudówką nad kabiną (8 m), przodem do toru
+  const rvGeo = (() => {
+    const dark = [0.07, 0.08, 0.1], wheel = new THREE.CylinderGeometry(0.48, 0.48, 0.3, 8).rotateX(Math.PI / 2);
+    const parts = [
+      [box(6.7, 0.24, 2.44, -0.55, 1.62, 0), [0.62, 0.36, 0.2]],                  // pas wzdłuż boku
+      [box(0.14, 0.32, 2.3, 3.88, 0.72, 0), [0.22, 0.22, 0.22]],                   // zderzak
+      [box(0.8, 0.3, 0.7, -1, 3.33, 0), [0.92, 0.92, 0.92]],                       // klimatyzator na dachu
+      [box(0.9, 1.9, 0.06, 1.7, 1.45, 1.21), [0.8, 0.8, 0.8]],                     // drzwi
+    ];
+    for (const x of [-2.6, -0.8, 0.9]) parts.push([box(1.2, 0.55, 2.46, x, 2.45, 0), dark]);   // okna
+    for (const x of [2.55, -2.3]) for (const z of [-1.08, 1.08]) parts.push([wheel.clone().translate(x, 0.48, z), [0.05, 0.05, 0.05]]);
+    return critterGeo(sh => {
+      sh.moveTo(-3.9, 0.45); sh.lineTo(3.55, 0.45); sh.lineTo(3.85, 0.58); sh.lineTo(3.9, 1.25); sh.lineTo(3.3, 1.45); sh.lineTo(2.85, 2.25);
+      sh.lineTo(3.25, 2.35); sh.quadraticCurveTo(3.48, 2.45, 3.42, 2.8); sh.quadraticCurveTo(3.32, 3.12, 2.8, 3.16); sh.lineTo(-3.7, 3.2);
+      sh.quadraticCurveTo(-3.95, 3.16, -3.95, 2.9); sh.lineTo(-3.95, 0.6); sh.closePath();
+    }, 2.4, parts, [3.3, 1.45, 2.85, 2.25, 2.1, 0.86], [3.99, 0.98, 1.5, 0.5]);
   })();
   const crowdU = { uTime: { value: 0 }, uHype: { value: 0 }, uWave: { value: 0 }, uFocus: { value: new THREE.Vector3(0, -1e4, 0) } };
   function crowdShader(sh) {
     Object.assign(sh.uniforms, crowdU);
     sh.vertexShader = sh.vertexShader.replace('#include <common>', `#include <common>
-      uniform float uTime, uHype, uWave; uniform vec3 uFocus; attribute vec2 aCrowd;
+      uniform float uTime, uHype, uWave; uniform vec3 uFocus; attribute vec3 aCrowd;   // faza, pozycja wzdłuż trybuny, energia
       vec3 crowdRel() { return uFocus - instanceMatrix[3].xyz; }
       float crowdYaw() {   // obrót w stronę auta w kadrze (w układzie widza: przód = +x)
         vec3 r = crowdRel(), l = vec3(dot(instanceMatrix[0].xyz, r), 0.0, dot(instanceMatrix[2].xyz, r));
-        return clamp(atan(-l.z, l.x), -1.1, 1.1) * smoothstep(260.0, 60.0, length(r));
+        return clamp(atan(-l.z, l.x), -1.1, 1.1) * smoothstep(260.0, 60.0, length(r)) * aCrowd.z;
       }
       vec3 crowdTurn(vec3 p, float a) { float c = cos(a), s = sin(a); return vec3(c * p.x + s * p.z, p.y, c * p.z - s * p.x); }
       float crowdHop() {
         float ph = aCrowd.x, near = smoothstep(170.0, 25.0, length(crowdRel()));
         float hop = abs(sin(uTime * (6.0 + ph * 4.0) + ph * 40.0)) * (0.015 + 0.3 * near + 0.34 * uHype);
-        return hop + pow(max(0.0, sin(aCrowd.y * 0.05 - uTime * 2.6)), 14.0) * 0.6 * uWave;
+        return (hop + pow(max(0.0, sin(aCrowd.y * 0.05 - uTime * 2.6)), 14.0) * 0.6 * uWave) * aCrowd.z;
       }`)
       .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\n objectNormal = crowdTurn(objectNormal, crowdYaw());')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\n transformed = crowdTurn(transformed, crowdYaw()); transformed.y += crowdHop();');
@@ -1000,7 +1021,7 @@
   const crowdKick = v => { crowdHype = Math.max(crowdHype, v); };
   function buildCrowd(seats) {
     const n = seats.length, group = new THREE.Group();
-    const bg = crowdGeo.body.clone(), eg = crowdGeo.eyes.clone(), data = new Float32Array(n * 2);
+    const bg = crowdGeo.body.clone(), eg = crowdGeo.eyes.clone(), data = new Float32Array(n * 3);
     const body = new THREE.InstancedMesh(bg, crowdMat.body, n), eyes = new THREE.InstancedMesh(eg, crowdMat.eyes, n);
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), sc = new THREE.Vector3(), col = new THREE.Color();
     seats.forEach((st, i) => {
@@ -1008,9 +1029,9 @@
       m.compose(v.set(st.x, st.y, st.z), q.setFromEuler(e.set(0, st.yaw + (Math.random() - 0.5) * 0.3, 0)), sc.set(k, k, k));
       body.setMatrixAt(i, m); eyes.setMatrixAt(i, m);
       body.setColorAt(i, col.set(CROWD_COL[(Math.random() * CROWD_COL.length) | 0]).convertSRGBToLinear());
-      data[i * 2] = Math.random(); data[i * 2 + 1] = st.s;
+      data[i * 3] = Math.random(); data[i * 3 + 1] = st.s; data[i * 3 + 2] = 1;
     });
-    const attr = new THREE.InstancedBufferAttribute(data, 2); bg.setAttribute('aCrowd', attr); eg.setAttribute('aCrowd', attr);
+    const attr = new THREE.InstancedBufferAttribute(data, 3); bg.setAttribute('aCrowd', attr); eg.setAttribute('aCrowd', attr);
     body.frustumCulled = eyes.frustumCulled = false;   // r128 liczy granice tylko z geometrii jednego widza
     group.add(body, eyes);
     // flesze aparatów: losowe miejsca na trybunach, częściej przy przejeżdżającym aucie i na mecie
@@ -1019,6 +1040,83 @@
     const fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.BufferAttribute(fpos, 3)); fg.setAttribute('color', new THREE.BufferAttribute(fcol, 3));
     const flash = new THREE.Points(fg, crowdMat.flash); flash.frustumCulled = false; group.add(flash);
     return { group, flash: { pos: fpos, col: fcol, life, attr: fg.attributes.color } };
+  }
+  // kampery na płycie owalu, jak w „Autach”: rzędy wzdłuż toru, przodem do toru; część z markizą w paski i flagą na maszcie
+  const RV_COL = ['#efe6d2', '#f4f1e8', '#d9c7a3', '#c9dbe8', '#e8d0b0', '#b7c9a8', '#f2d6c9', '#e6e6e6', '#8fb8de', '#d8a47f'];
+  const AWN_MAT = ['#d7263d', '#1f4e9c', '#2f9e44', '#f4c20d', '#ff7f11'].map(c => {
+    const m = new THREE.MeshStandardMaterial({ map: tex(128, 16, (g, w, h) => { g.fillStyle = '#f4f1e8'; g.fillRect(0, 0, w, h); g.fillStyle = c; for (let x = 0; x < w; x += 32) g.fillRect(x, 0, 16, h); }, true), roughness: 0.85, side: THREE.DoubleSide });
+    m.onBeforeCompile = crowdShader; return m;
+  });
+  // markiza nad drzwiami (bok +z) na dwóch słupkach; słupki biorą jednolity biały fragment tekstury paska
+  const awnGeo = (() => {
+    const pos = [-3, 2.75, 1.22, 1, 2.75, 1.22, -3, 2.25, 3.5, 1, 2.25, 3.5], uv = [0, 1, 2, 1, 0, 0, 2, 0], nor = [], idx = [0, 2, 1, 1, 2, 3];
+    const nv = new THREE.Vector3(0, 2.28, 0.5).normalize();
+    for (let i = 0; i < 4; i++) nor.push(nv.x, nv.y, nv.z);
+    for (const x of [-3, 1]) {
+      const b = new THREE.BoxGeometry(0.06, 2.25, 0.06).translate(x, 1.125, 3.5), o = pos.length / 3;
+      pos.push(...b.attributes.position.array); nor.push(...b.attributes.normal.array);
+      for (let i = 0; i < b.attributes.position.count; i++) uv.push(0.19, 0.5);
+      for (const k of b.index.array) idx.push(o + k);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx); return g;
+  })();
+  // flaga łopocząca na wietrze (wszystkie w jedną stronę) na 7-metrowym maszcie
+  const flagGeo = { pole: new THREE.BoxGeometry(0.08, 7, 0.08).translate(0, 3.5, 0), flag: new THREE.PlaneGeometry(1.8, 1.1, 6, 1).translate(0.9, 6.4, 0) };
+  const flagMat = new THREE.MeshStandardMaterial({ roughness: 0.8, side: THREE.DoubleSide });
+  flagMat.onBeforeCompile = sh => {
+    sh.uniforms.uTime = crowdU.uTime;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\n transformed.z += sin(uTime * 6.0 - position.x * 2.6 + instanceMatrix[3].x * 0.37 + instanceMatrix[3].z * 0.21) * 0.16 * position.x;');
+  };
+  function buildCampers(tr) {
+    const G = new THREE.Group(), spots = [], iw = -tr.innerWall, pd = podiumSpot(tr);
+    const lw = Math.min(tr.L * 0.8, 260), lh = Math.min(tr.L * 0.2, 65), lz = tr.R - tr.halfW - tr.apron - Math.min(tr.grass * 0.4, 24) - 40;   // napis na trawie (jak w buildWorld)
+    for (let k = 0; k < 4; k++) {
+      const o = iw + 14 + k * 15;
+      if (o > tr.R - 14) break;
+      let prev = tr.toWorld(0, -o), acc = 0, next = 3;
+      for (let s = 1; s < tr.len; s++) {
+        const p = tr.toWorld(s, -o); acc += Math.hypot(p.x - prev.x, p.y - prev.y); prev = p;
+        if (acc < next) continue;
+        acc = 0; next = 5.6 + Math.random() * 1.6;
+        const x = p.x, z = -p.y;
+        if (Math.random() < 0.15 || (Math.abs(x) < lw / 2 + 14 && Math.abs(z - lz) < lh / 2 + 14) || Math.hypot(x - pd.x, z - pd.z) < 42) continue;
+        const q = tr.toWorld(s, -o + 1);
+        spots.push({ x, z, yaw: Math.atan2(q.y - p.y, q.x - p.x) + (Math.random() - 0.5) * 0.25 });
+      }
+    }
+    const n = spots.length; if (!n) return G;
+    const bg = rvGeo.body.clone(), eg = rvGeo.eyes.clone(), data = new Float32Array(n * 3);
+    const body = new THREE.InstancedMesh(bg, crowdMat.body, n), eyes = new THREE.InstancedMesh(eg, crowdMat.eyes, n);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1), col = new THREE.Color();
+    const awn = AWN_MAT.map(() => []), flags = [];
+    spots.forEach((sp, i) => {
+      m.compose(v.set(sp.x, 0, sp.z), q.setFromEuler(e.set(0, sp.yaw, 0)), one);
+      body.setMatrixAt(i, m); eyes.setMatrixAt(i, m);
+      body.setColorAt(i, col.set(RV_COL[(Math.random() * RV_COL.length) | 0]).convertSRGBToLinear());
+      data[i * 3] = Math.random(); data[i * 3 + 2] = 0.15;   // kampery ledwie się kołyszą i nie obracają
+      if (Math.random() < 0.6) awn[(Math.random() * awn.length) | 0].push({ m: m.clone(), ph: data[i * 3] });
+      if (Math.random() < 0.35) flags.push(new THREE.Vector3(-3.4, 0, 1.6).applyMatrix4(m));
+    });
+    const attr = new THREE.InstancedBufferAttribute(data, 3); bg.setAttribute('aCrowd', attr); eg.setAttribute('aCrowd', attr);
+    body.frustumCulled = eyes.frustumCulled = false; G.add(body, eyes);
+    AWN_MAT.forEach((mat, j) => {
+      const list = awn[j]; if (!list.length) return;
+      const g = awnGeo.clone(), d = new Float32Array(list.length * 3), im = new THREE.InstancedMesh(g, mat, list.length);
+      list.forEach((a, i) => { im.setMatrixAt(i, a.m); d[i * 3] = a.ph; d[i * 3 + 2] = 0.15; });
+      g.setAttribute('aCrowd', new THREE.InstancedBufferAttribute(d, 3)); im.frustumCulled = false; G.add(im);
+    });
+    if (flags.length) {
+      const pole = new THREE.InstancedMesh(flagGeo.pole.clone(), M.steel, flags.length), flag = new THREE.InstancedMesh(flagGeo.flag.clone(), flagMat, flags.length);
+      flags.forEach((p, i) => {
+        m.compose(p, q.setFromEuler(e.set(0, 2.4 + (Math.random() - 0.5) * 0.4, 0)), one); pole.setMatrixAt(i, m); flag.setMatrixAt(i, m);
+        flag.setColorAt(i, col.set(CROWD_COL[(Math.random() * CROWD_COL.length) | 0]).convertSRGBToLinear());
+      });
+      pole.frustumCulled = flag.frustumCulled = false; G.add(pole, flag);
+    }
+    return G;
   }
   // sterowiec krążący nad torem
   const blimp = (() => {
@@ -2476,7 +2574,9 @@
   }
   function iceServers() {
     const l = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }, { urls: 'stun:stun.cloudflare.com:3478' },
-      { urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'], username: 'peerjs', credential: 'peerjsp' }];
+      // TURN także po TCP — w sieciach, które blokują UDP (szkoły, firmy, część hotspotów), to jedyna droga do P2P
+      { urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478', 'turn:eu-0.turn.peerjs.com:3478?transport=tcp', 'turn:us-0.turn.peerjs.com:3478?transport=tcp'],
+        username: 'peerjs', credential: 'peerjsp' }];
     // TURN bez loginu i hasła przeglądarka odrzuca (RTCPeerConnection rzuca wyjątek) — wtedy zostaje sam STUN
     const own = String(cfg.turnUrl || '').split(/[\s,]+/).filter(u => /^stun:\S+$/.test(u) || /^turns?:\S+$/.test(u) && cfg.turnUser && cfg.turnPass);
     if (own.length) l.unshift({ urls: own, username: cfg.turnUser || undefined, credential: cfg.turnPass || undefined });
@@ -2529,7 +2629,7 @@
   }
   function netClose() {   // zamyka wszystkie połączenia (przekaźnik dostaje wiadomość o zamknięciu)
     const peer = net.peer, host = net.host, guests = [...net.guests.values()], relay = net.relay, j = net.join;
-    if (j) j.tm.forEach(clearTimeout);
+    if (j) { j.tm.forEach(clearTimeout); if (j.pend) try { j.pend.peer.destroy(); } catch (e) { /* już zamknięty */ } }
     upStop(); clearTimeout(net.upT);
     Object.assign(net, { mode: null, peer: null, code: null, myId: null, players: [], host: null, settings: null, racing: false, sentAssists: null, sentCar: null, predicting: false,
       join: null, hs: null, relay: [] });
@@ -2749,20 +2849,26 @@
     try { peer = new Peer({ debug: 0, config: { iceServers: iceServers() } }); } catch (e) { j.p2p = 'nortc'; return joinRelay(j); }
     net.peer = peer;
     // why: nohost (serwer PeerJS nie zna pokoju), ice (kanał się nie otworzył), silent (brak powitania), server, nortc
-    const fall = j.fall = why => {
+    // slow: minął tylko limit czasu — wolny serwer PeerJS albo długie sprawdzanie tras ICE / TURN nie oznacza porażki, więc
+    // próba zostaje otwarta, a po wejściu przez przekaźnik przejmuje ją guestUpgrade (bez zaczynania od zera)
+    const fall = j.fall = (why, slow) => {
       if (!live(j) || j.p2p !== 'trying') return;
       j.tm.forEach(clearTimeout); j.tm = [];
       j.p2p = why; net.peer = null; net.host = null;
-      try { peer.destroy(); } catch (e) { /* już zamknięty */ }
+      if (slow) {
+        const p = j.pend = { peer, conn: j.conn, dead: false }, dead = () => { p.dead = true; };
+        peer.on('error', dead); peer.on('close', dead);
+        if (p.conn) { p.conn.on('close', dead); p.conn.on('error', dead); }
+      } else try { peer.destroy(); } catch (e) { /* już zamknięty */ }
       joinRelay(j);
     };
-    j.tm.push(setTimeout(() => fall('server'), 6000));
+    j.tm.push(setTimeout(() => fall('server', true), 6000));
     peer.on('open', () => {
       if (!live(j) || j.p2p !== 'trying') return;
       j.tm.forEach(clearTimeout); j.tm = [];
       let conn;
-      try { conn = p2pConn(peer.connect(ROOM + j.code, { reliable: true, serialization: 'json' })); } catch (e) { console.warn('[PeerJS] connect', e); return fall('ice'); }
-      j.tm.push(setTimeout(() => fall('ice'), 6000));
+      try { conn = j.conn = p2pConn(peer.connect(ROOM + j.code, { reliable: true, serialization: 'json' })); } catch (e) { console.warn('[PeerJS] connect', e); return fall('ice'); }
+      j.tm.push(setTimeout(() => fall('ice', true), 6000));
       conn.on('open', () => { if (live(j) && j.p2p === 'trying') { j.tm.forEach(clearTimeout); j.tm = []; guestAttach(j, conn); } });
       conn.on('close', () => { if (!net.host) fall('ice'); });
       conn.on('error', () => { if (!net.host) fall('ice'); });
@@ -2810,31 +2916,38 @@
     Object.assign(net, { mode: 'guest', code: j.code, myId: m.id, rtt0: false, rtts: [], sentAssists: !!cfg.assists, sentCar: JSON.stringify(cleanCar(cfg.car)), lastRx: nowS(), pingT: 0, sendT: 0 });
     netStatus(conn.kind === 'relay' ? 'połączono (przekaźnik)' : 'połączono (bezpośrednio)');
     renderNet();
-    if (conn.kind === 'relay') guestUpgrade(0);
+    if (conn.kind === 'relay') guestUpgrade(0, j.pend);
   }
   // Pierwsza próba P2P przy dołączaniu ma krótkie limity (żeby nie czekać), a wolny serwer PeerJS i przejście przez NAT
   // albo serwer TURN potrafią zająć kilkanaście sekund. Gość z przekaźnika próbuje więc dalej w tle i przechodzi na
-  // połączenie bezpośrednie w locie, także w trakcie wyścigu.
+  // połączenie bezpośrednie w locie, także w trakcie wyścigu. Próbuje do końca gry (coraz rzadziej, najwyżej co minutę) —
+  // sieć może się zmienić, a przeciążony serwer PeerJS albo TURN za chwilę znów działać.
   function upStop() {
     const u = net.up; if (!u) return;
     net.up = null; u.tm.forEach(clearTimeout);
     try { if (u.conn && net.host !== u.conn) u.conn.close(); } catch (e) { /* już zamknięte */ }
     try { if (u.peer && net.peer !== u.peer) u.peer.destroy(); } catch (e) { /* już zamknięty */ }
   }
-  function guestUpgrade(n) {
+  // adopt: niedokończona próba z dołączania ({ peer, conn? }) — czeka dalej zamiast nowej rejestracji na serwerze PeerJS
+  function guestUpgrade(n, adopt) {
     upStop();
-    if (net.mode !== 'guest' || !net.host || net.host.kind !== 'relay' || !window.Peer || FORCE_RELAY || n >= 4) return;
+    const drop = () => { if (adopt) try { adopt.peer.destroy(); } catch (e) { /* już zamknięty */ } adopt = null; };
+    if (net.mode !== 'guest' || !net.host || net.host.kind !== 'relay' || !window.Peer || FORCE_RELAY) return drop();
+    if (adopt && (adopt.dead || adopt.peer.destroyed)) drop();
     const u = net.up = { tm: [], peer: null, conn: null }, alive = () => net.up === u;
-    const again = () => { if (!alive()) return; upStop(); net.upT = setTimeout(() => guestUpgrade(n + 1), 10000); };
-    let peer;
-    try { peer = u.peer = new Peer({ debug: 0, config: { iceServers: iceServers() } }); } catch (e) { return upStop(); }
+    const again = () => { if (!alive()) return; upStop(); net.upT = setTimeout(() => guestUpgrade(n + 1), Math.min(60, 10 * (n + 1)) * 1000); };
+    let peer = adopt && adopt.peer;
+    if (!peer) try { peer = new Peer({ debug: 0, config: { iceServers: iceServers() } }); } catch (e) { return upStop(); }
+    u.peer = peer;
     u.tm.push(setTimeout(again, 25000));
     peer.on('error', err => { if (alive()) { console.warn('[PeerJS] próba P2P w tle', err.type); again(); } });
-    peer.on('open', () => {
-      if (!alive()) return;
-      let conn;
-      try { conn = u.conn = p2pConn(peer.connect(ROOM + net.code, { reliable: true, serialization: 'json' })); } catch (e) { return again(); }
-      conn.on('open', () => { if (alive()) conn.send({ t: 'up', id: net.myId, key: net.key }); });
+    const dial = () => { if (!alive()) return; try { link(p2pConn(peer.connect(ROOM + net.code, { reliable: true, serialization: 'json' }))); } catch (e) { again(); } };
+    if (adopt && adopt.conn) link(adopt.conn); else if (peer.open) dial(); else peer.on('open', dial);
+    function link(conn) {
+      u.conn = conn;
+      const up = () => { if (alive()) conn.send({ t: 'up', id: net.myId, key: net.key }); };
+      conn.on('open', up);
+      if (conn.open) up();   // przejęty kanał mógł się otworzyć, zanim gospodarz przywitał nas przez przekaźnik
       conn.on('close', () => { if (alive()) again(); });
       conn.on('error', () => { if (alive()) again(); });
       conn.on('data', m => {
@@ -2849,7 +2962,7 @@
         for (const c of rl) try { c.end(); } catch (e) { /* już zamknięte */ }
         if (state === 'menu') netStatus('połączono (bezpośrednio)'); else feed('Połączenie bezpośrednie z gospodarzem (P2P)', 'good');
       });
-    });
+    }
   }
   // relay: off (wyłączony / brak biblioteki), down (żaden broker nieosiągalny), nohost (gospodarz nie odpowiedział), lost
   function joinFail(j, relay, msg) {
