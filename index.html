@@ -1462,7 +1462,7 @@
   const who = c => `#${c.number} ${c === race.player ? 'Ty' : c.name}`;
   const wallFeedT = new Map();
   function handleEvents() {
-    for (const e of race.events) {
+    for (const e of race.events.splice(0)) {   // lista czyszczona od razu — błąd w jednym zdarzeniu nie wraca w każdej klatce
       const me = !!e.car && e.car === race.player;
       switch (e.type) {
         case 'green': if (state === 'race') showBanner('Zielona flaga!', 'green', 'Gaz do dechy', 2.4); break;
@@ -1494,7 +1494,6 @@
         case 'left': e.car.isPlayer = false; if (state === 'race') feed(`${e.car.name}: rozłączenie — auto przejmuje AI`, 'bad'); break;
       }
     }
-    race.events.length = 0;
   }
   const visFor = c => visuals.find(v => v.car === c);
   const dist2 = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
@@ -2003,7 +2002,7 @@
   // Pozostałe auta są ekstrapolowane wzdłuż toru do tej samej chwili, w której jest własne auto.
   // Dwa kanały: WebRTC (PeerJS, bezpośrednio) i przekaźnik MQTT (publiczne brokery przez WebSocket) — ten drugi
   // działa, gdy NAT (sieć komórkowa, CGNAT) blokuje połączenie bezpośrednie. Oba udają DataConnection z PeerJS.
-  const PROTO = 3, ROOM = 'slipstream500-', CODE_CH = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', MAXP = 8;
+  const PROTO = 4, ROOM = 'slipstream500-', CODE_CH = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', MAXP = 8;
   const SNAP_HZ = 25, SNAP_RELAY = 20, IN_HZ = 60, IN_RELAY = 30;   // paczki stanu / wejścia gościa na sekundę
   const RELAY_NS = 's500/2/';   // tematy: <ns><KOD>/h (skrzynka gospodarza), <ns><KOD>/g/<id> (skrzynka gościa)
   const BROKERS = ['wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081/mqtt', 'wss://broker.emqx.io:8084/mqtt'];
@@ -2329,7 +2328,9 @@
     startRace(opt);
   }
   function hostToLobby() { netBroadcast({ t: 'menu' }); startAttract(); }
-  const serEv = e => ({ type: e.type, car: e.car && e.car.id, a: e.a && e.a.id, b: e.b && e.b.id, v: e.v != null ? r3(e.v) : undefined, why: e.why });
+  // wszystkie pola, których używa handleEvents (t: czas postoju, on: zgłoszenie zjazdu)
+  const serEv = e => ({ type: e.type, car: e.car && e.car.id, a: e.a && e.a.id, b: e.b && e.b.id, v: e.v != null ? r3(e.v) : undefined, why: e.why,
+    t: e.t != null ? r3(e.t) : undefined, on: e.on });
   // paczka stanu dla wybranych gości (każdy ma własne tempo i własną kolejkę zdarzeń); co 5. paczka lub przy zdarzeniach — dane wolnozmienne
   function hostSnap(force, list = [...net.guests.values()]) {
     let base = null, sl = null;
@@ -2525,7 +2526,7 @@
   const DISP = ['delta', 'throttle', 'brake', 'u', 'speed', 'slipF', 'slipR', 'wheelspin', 'hit', 'scrape', 'latG', 'lonG', 'axf'];
   function guestSnap(m) {
     const now = nowS(), me = race.player;
-    if (m.e) for (const e of m.e) net.evIn.push({ type: e.type, car: race.cars[e.car], a: race.cars[e.a], b: race.cars[e.b], v: e.v, why: e.why });
+    if (m.e) for (const e of m.e) net.evIn.push({ type: e.type, car: race.cars[e.car], a: race.cars[e.a], b: race.cars[e.b], v: e.v, why: e.why, t: e.t, on: e.on });
     // paczki przychodzą dwoma kanałami i bez gwarancji kolejności — ze starszej bierzemy tylko zdarzenia i dane wolnozmienne
     // (cofnięcie czasu o kilka sekund to już nowy wyścig)
     const old = net.hostArr != null && m.T < net.hostT && net.hostT - m.T < 5;
@@ -2659,12 +2660,13 @@
 
   // ════════════════════════ PĘTLA ════════════════════════
   let last = performance.now(), lastRaf = last;
+  // następna klatka zamawiana od razu — wyjątek w jednej klatce nie może na zawsze zatrzymać rysowania
   function frame(now) {
+    requestAnimationFrame(frame);
     lastRaf = performance.now();
     const dt = Math.min(0.05, Math.max(0, (now - last) / 1000)); last = now;
     step(dt);
     renderer.render(scene, camera);
-    requestAnimationFrame(frame);
   }
   // Karta w tle (albo zminimalizowane okno) nie dostaje requestAnimationFrame. W grze online gospodarz musi jednak
   // liczyć dalej (inaczej wyścig staje wszystkim), a gość — odpowiadać na ping; wtedy krok odmierza zegar w Web Workerze.
