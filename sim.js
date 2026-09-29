@@ -635,23 +635,43 @@
     // wejście gracza → polecenia (z asystami)
     playerCmd(car) {
       const V = car.speed, c = car.ctl;
-      // pełne wychylenie ≈ skręt potrzebny na łuk przed autem + zapas na granicę przyczepności
-      const kAhead = Math.abs(this.track.kappa(car.s + V * 0.4, clamp(car.d, -this.track.halfW, this.track.halfW)));
-      const dmax = clamp(CAR.wb * kAhead + 0.011 + 32 / Math.max(1, V * V), 0.02, 0.42);
+      // pełne wychylenie ≈ skręt potrzebny na najciaśniejszy łuk w pobliżu + zapas na granicę przyczepności;
+      // w łuku ciaśniejszym niż ~300 m (w pełni od ~90 m) dodatkowy zapas na podsterowność przy dużym przeciążeniu bocznym;
+      // superspeedway bez zmian, na owalu 1,5 mili i przechyłce Daytony trochę, na krótkim owalu i torach drogowych w pełni
+      const k = this.playerKappa(car, V), tight = clamp((k - 1 / 300) / (1 / 90 - 1 / 300), 0, 1);
+      const dmax = clamp(CAR.wb * k + 0.011 + 32 / Math.max(1, V * V) + tight * 0.0012 * V * V * k, 0.02, 0.42);
       let dl = c.steer * dmax, th = c.throttle;
       if ((car.assists != null ? car.assists : this.opt.assists) && V > 8) {
         const rExp = car.u * Math.tan(dl) / (CAR.wb * (1 + 0.0004 * car.u * car.u));
         const over = car.r - rExp;
-        if (Math.abs(over) > 0.04) dl -= 0.35 * (over - Math.sign(over) * 0.04);
+        if (Math.abs(over) > 0.04) {
+          const fix = -0.35 * (over - Math.sign(over) * 0.04);
+          // nadsterowność (auto obraca się szybciej, niż każe kierownica): kontra
+          if (over * car.r > 0 && Math.abs(car.r) > Math.abs(rExp)) dl = clamp(dl + fix, -0.62, 0.62);
+          // podsterowność: dołóż skrętu najwyżej do szczytu przyczepności przedniej osi — dalej przód tylko bardziej się ślizga
+          else dl += Math.sign(fix) * Math.min(Math.abs(fix), Math.max(0, PEAK_SLIP - Math.abs(car.slipF)));
+        }
         th = Math.min(th, tractionThrottle(this, car, 0.93));
       }
       let br = c.brake;
       if ((car.assists != null ? car.assists : this.opt.assists) && V > 8) br = Math.min(br, brakeLimit(car, 0.95));
       car.cmd.delta = dl; car.cmd.throttle = th; car.cmd.brake = br;
     }
+    // najciaśniejszy łuk od ~30 m za autem do ~0,5 s przed nim (na osi toru i na pasie auta); łuk za autem liczy się
+    // coraz słabiej. Pełne wychylenie nie znika przed końcem ciasnego łuku, na wyjściu po linii wyścigowej ani w szykanie.
+    playerKappa(car, V) {
+      const tr = this.track, d = clamp(car.d, -tr.halfW, tr.halfW), B = 30, L = B + V * 0.5 + 12, n = Math.ceil(L / 3);
+      let k = 0;
+      for (let i = 0; i <= n; i++) {
+        const x = L * i / n - B, s = car.s + x, w = x < 0 ? 1 + x / (B + 10) : 1;
+        k = Math.max(k, w * Math.max(Math.abs(tr.kappa(s, 0)), Math.abs(tr.kappa(s, d))));
+      }
+      return k;
+    }
 
-    actuate(car, dt) {
-      const rate = 1.4 * dt;
+    // player: auto prowadzone przez człowieka — przy małej prędkości kierownica obraca się szybciej (szykany, ciasne nawroty)
+    actuate(car, dt, player) {
+      const rate = (player ? 1.4 + 1.6 * clamp((30 - car.speed) / 18, 0, 1) : 1.4) * dt;
       car.delta += clamp(car.cmd.delta - car.delta, -rate, rate);
       car.throttle += clamp(car.cmd.throttle - car.throttle, -8 * dt, 6 * dt);
       car.brake += clamp(car.cmd.brake - car.brake, -8 * dt, 6 * dt);
@@ -667,8 +687,9 @@
       if (this.sub++ % 4 === 0) this.aiTick(dt * 4);
       for (const c of this.cars) {
         if (c.status === 'out') continue;
-        if (c.isPlayer && c.status === 'racing' && this.phase !== 'pace' && !c.pit) this.playerCmd(c);
-        this.actuate(c, dt);
+        const human = c.isPlayer && c.status === 'racing' && this.phase !== 'pace' && !c.pit;
+        if (human) this.playerCmd(c);
+        this.actuate(c, dt, human);
         this.physics(c, dt);
         c.hit = Math.max(0, c.hit - dt * 3); c.scrape = Math.max(0, c.scrape - dt * 4);
       }
@@ -884,7 +905,7 @@
     // Uszkodzenia, okrążenia i status liczy tylko gospodarz (opt.replica wyłącza je w damage()).
     predict(car, dt, collide) {
       const tr = this.track;
-      this.playerCmd(car); this.actuate(car, dt); this.physics(car, dt);
+      this.playerCmd(car); this.actuate(car, dt, true); this.physics(car, dt);
       car.hit = Math.max(0, car.hit - dt * 3); car.scrape = Math.max(0, car.scrape - dt * 4);
       this.walls(car);
       if (collide) for (const o of this.cars) if (o !== car && o.status !== 'out') this.carPair(car, o);
