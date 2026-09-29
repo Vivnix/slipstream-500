@@ -1258,7 +1258,7 @@
       const c = this.car, race = this.race, tr = race.track, k = this.k, u = c.u, sI = roadSide(race, c.s);
       // nie w wolnym łuku (szybki łuk, np. bankowanie owalu Daytony, się nadaje)
       if (this.cool > 0 || a.status !== 'racing' || a.pit || !sI || slowTurn(race, c.s)) return false;
-      if (AIX.includes('l1') && c.prog < tr.len) return false;
+      if (AIX.includes('xr1') && c.prog < tr.len) return false;
       if (AIX.includes('hp') && turnAng(race, c.s) > 1.9) return false;
       const gap = aDs - CAR.length, closing = c.speed - a.speed, v5 = Math.max(u, 5);
       // powód: szybszy (dojeżdża) albo od dłuższej chwili trzymany za jego plecami (wolniejszy w łukach)
@@ -1392,7 +1392,7 @@
       const c = this.car, race = this.race, tr = race.track, k = this.k;
       const u = c.u;
       let vt = 999;
-      const gs = this.gripScale(tr.kind === 'road' && AIX.includes('ant') && !(AIX.includes('al1') && c.prog < tr.len));
+      const gs = this.gripScale(tr.kind === 'road' && (AIX.includes('ant') || AIX.includes('l1c')));
       const horizon = Math.max(60, u * u / (2 * this.decel) + 40);
       // tor drogowy w ruchu (ktoś obok albo tuż przed nami): hamuj z wyprzedzeniem ~0,35 s — samotnie wjazd w łuk z lekkim nadmiarem
       // prędkości ratuje hamowanie w łuku, ale w stawce nie zostaje wtedy zapasu na sąsiada, dotknięcie czy brudne powietrze
@@ -1518,9 +1518,11 @@
       if (ant) {
         const inT = tr.inTurn(c.s);
         if (!inT && AIX.includes('antd')) dirty /= 0.4;
-        if (AIX.includes('antl')) for (const o of this.race.cars) {
+        if (AIX.includes('l1c')) loose = Math.max(loose, +(process.env.AIXL1 || 0.2) * clamp((+(process.env.AIXP || 700) - c.prog) / 150, 0, 1));
+        if (AIX.includes('antl') && !(AIX.includes('xa1') && c.prog < tr.len)) for (const o of this.race.cars) {
           if (o === c || o.status === 'out') continue;
           const ds = tr.ds(c.s, o.s);
+          if (AIX.includes('ants') && ds > CAR.length && ds < CAR.length + 10 && Math.abs(o.d - c.d) < 5) loose = Math.max(loose, 0.32 * Math.exp((ds - CAR.length) / -3.5));
           if (ds < -CAR.length && ds > -CAR.length - 10 && Math.abs(o.d - c.d) < 5) loose = Math.max(loose, 0.32 * Math.exp((-ds - CAR.length) / -3.5) * (AIX.includes('al2') ? Math.exp(-(((o.d - c.d) / 2.5) ** 2)) : 1));
         }
       }
