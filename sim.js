@@ -1258,6 +1258,7 @@
       const c = this.car, race = this.race, tr = race.track, k = this.k, u = c.u, sI = roadSide(race, c.s);
       // nie w wolnym łuku (szybki łuk, np. bankowanie owalu Daytony, się nadaje)
       if (this.cool > 0 || a.status !== 'racing' || a.pit || !sI || slowTurn(race, c.s)) return false;
+      if (AIX.includes('l1') && c.prog < tr.len) return false;
       if (AIX.includes('hp') && turnAng(race, c.s) > 1.9) return false;
       const gap = aDs - CAR.length, closing = c.speed - a.speed, v5 = Math.max(u, 5);
       // powód: szybszy (dojeżdża) albo od dłuższej chwili trzymany za jego plecami (wolniejszy w łukach)
@@ -1391,7 +1392,7 @@
       const c = this.car, race = this.race, tr = race.track, k = this.k;
       const u = c.u;
       let vt = 999;
-      const gs = this.gripScale(tr.kind === 'road' && AIX.includes('ant'));
+      const gs = this.gripScale(tr.kind === 'road' && AIX.includes('ant') && !(AIX.includes('al1') && c.prog < tr.len));
       const horizon = Math.max(60, u * u / (2 * this.decel) + 40);
       // tor drogowy w ruchu (ktoś obok albo tuż przed nami): hamuj z wyprzedzeniem ~0,35 s — samotnie wjazd w łuk z lekkim nadmiarem
       // prędkości ratuje hamowanie w łuku, ale w stawce nie zostaje wtedy zapasu na sąsiada, dotknięcie czy brudne powietrze
