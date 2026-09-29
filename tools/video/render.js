@@ -324,7 +324,8 @@ function soundtrack(shots, caps, name) {
 // ─── 6. ffmpeg ───
 function ff(a) { execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...a], { stdio: 'inherit' }); }
 // głośność: pomiar EBU R128 miksu, potem jedno stałe wzmocnienie + limiter — dynamika zostaje (montaż głośniej niż objaśnienia),
-// zamiast loudnorm w trybie dynamicznym, który spłaszcza całość
+// zamiast loudnorm w trybie dynamicznym, który spłaszcza całość; limiter na 4× nadpróbkowaniu i dolnoprzepustowy 16 kHz
+// (bez niego AAC przestrzeliwał szczyty o ~3 dB na nasyconych efektach)
 function loudness(inputs, chain) {
   const r = spawnSync('ffmpeg', ['-hide_banner', '-nostats', ...inputs, '-filter_complex', `${chain},loudnorm=I=-14:TP=-1.2:print_format=json[a]`, '-map', '[a]', '-f', 'null', '-'], { encoding: 'utf8', maxBuffer: 1 << 26 });
   const m = /\{[^{}]*"input_i"[^{}]*\}/.exec(r.stderr || ''); if (!m) throw new Error('pomiar głośności: ' + (r.stderr || '').slice(-400));
@@ -341,7 +342,7 @@ function assemble(caps, name, outName, total) {
     const m = loudness(auds.flatMap(f => ['-i', f]), pre.replace(/\[A(\d)\]/g, '[$1:a]'));
     const gain = (target - +m.input_i).toFixed(2);
     log(`ffmpeg: ${outName}${suffix}.mp4… (miks ${(+m.input_i).toFixed(1)} LUFS, LRA ${m.input_lra} → wzmocnienie ${gain} dB)`);
-    ff([...video, ...auds.flatMap(f => ['-i', f]), '-filter_complex', `${pre.replace(/\[A(\d)\]/g, (_, d) => `[${+d + 1}:a]`)},volume=${gain}dB,aresample=192000,alimiter=limit=0.8:attack=1:release=80:level=disabled,aresample=48000[a]`,
+    ff([...video, ...auds.flatMap(f => ['-i', f]), '-filter_complex', `${pre.replace(/\[A(\d)\]/g, (_, d) => `[${+d + 1}:a]`)},volume=${gain}dB,lowpass=f=16000:poles=2,aresample=192000,alimiter=limit=0.75:attack=1:release=80:level=disabled,aresample=48000[a]`,
       '-map', '0:v', '-map', '[a]', ...venc, ...aenc, '-t', total.toFixed(3), path.join(OUT, `${outName}${suffix}.mp4`)]);
   }
 }
