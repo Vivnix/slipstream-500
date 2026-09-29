@@ -35,7 +35,7 @@ function runRace(track, diff, seed) {
     lapTimes: [], bestLap: Infinity, lineTime: race.lines[race.bestLine].time, hitsAt: [], simT: 0, pitStops: 0,
   };
   const spinning = new Set(), passSign = new Map(), passRes = new Map();
-  st.passes = 0; st.contactsAt = [];
+  st.passes = 0; st.contactsAt = []; st.spinsAt = [];
   // każdy styk z bandą (także lekkie otarcia poniżej progu zdarzenia 'wall')
   st.scrapes = 0; st.scrapeT = 0; st.scrapesAt = [];
   const inWall = new Map(), origWalls = race.walls.bind(race);
@@ -55,6 +55,10 @@ function runRace(track, diff, seed) {
     const f = fresh(A) && fresh(B), vx = A.vx, vy = A.vy; origPair(A, B);
     if (f && A.lastContact === race.t) { const v = 1.7 * Math.hypot(A.vx - vx, A.vy - vy); if (v > 1.5) { st.chains++; if (VERBOSE) st.contactsAt.push(pairInfo('first', A, B, v)); } }
   };
+  // reset: stan auta tuż przed postawieniem z powrotem na tor (prędkość, kąt do osi toru, tryb AI, czas od ostatniego styku)
+  st.resetsAt = [];
+  const origReset = race.resetCar.bind(race);
+  race.resetCar = c => { if (VERBOSE) st.resetsAt.push({ t: +race.t.toFixed(1), car: c.number, s: Math.round(c.s), d: +c.d.toFixed(1), spd: Math.round(c.speed * 3.6), head: +Sim.angDiff(c.psi, tr.frame(c.s).th).toFixed(2), mode: c.driver.mode, surf: c.surface, sinceContact: c.lastContact != null ? +(race.t - c.lastContact).toFixed(1) : null }); return origReset(c); };
   const dt = Sim.SUB;
   let t = 0;
   const target = laps * tr.len;
@@ -91,7 +95,7 @@ function runRace(track, diff, seed) {
     if (race.sub % 24 === 0) for (const c of race.cars) {
       if (c.status !== 'racing' || c.pit) continue;
       const slip = Math.abs(Math.atan2(c.v, Math.max(1, c.u)));
-      if (slip > 0.25 && c.speed > 5) { if (!spinning.has(c)) { spinning.add(c); st.spins++; } } else if (slip < 0.12 || c.speed <= 5) spinning.delete(c);
+      if (slip > 0.25 && c.speed > 5) { if (!spinning.has(c)) { spinning.add(c); st.spins++; if (VERBOSE) st.spinsAt.push({ t: +race.t.toFixed(1), car: c.number, s: Math.round(c.s), d: +c.d.toFixed(1), spd: Math.round(c.speed * 3.6), mode: c.driver.mode, sinceContact: c.lastContact != null ? +(race.t - c.lastContact).toFixed(1) : null }); } } else if (slip < 0.12 || c.speed <= 5) spinning.delete(c);
       if (c.surface === 'grass') st.grassT += dt * 24;
     }
     // koniec: pierwszy auto, które przejechało zadany dystans od zielonej flagi
@@ -164,11 +168,11 @@ function printSummary(all, base) {
   if (JSONOUT) return console.log(JSON.stringify(all, null, 1));
   for (const st of all) {
     console.log(fmtLine(st));
-    if (VERBOSE) { for (const h of st.hitsAt) console.log('    hit', JSON.stringify(h)); for (const h of st.scrapesAt) console.log('    scrape', JSON.stringify(h)); for (const h of st.contactsAt) console.log('    contact', JSON.stringify(h)); }
+    if (VERBOSE) { for (const h of st.hitsAt) console.log('    hit', JSON.stringify(h)); for (const h of st.scrapesAt) console.log('    scrape', JSON.stringify(h)); for (const h of st.contactsAt) console.log('    contact', JSON.stringify(h)); for (const h of st.spinsAt) console.log('    spin', JSON.stringify(h)); for (const h of st.resetsAt) console.log('    reset', JSON.stringify(h)); }
   }
   const basePath = arg('base');
   printSummary(all, basePath ? JSON.parse(fs.readFileSync(basePath, 'utf8')) : null);
   const savePath = arg('save');
-  if (savePath) fs.writeFileSync(savePath, JSON.stringify(all.map(({ hitsAt, scrapesAt, contactsAt, ...s }) => s)));
+  if (savePath) fs.writeFileSync(savePath, JSON.stringify(all.map(({ hitsAt, scrapesAt, contactsAt, spinsAt, resetsAt, ...s }) => s)));
   console.log(`\n${jobs.length} wyścigów, ${JOBS} wątków, ${((Date.now() - t0) / 1000).toFixed(1)} s`);
 })();
