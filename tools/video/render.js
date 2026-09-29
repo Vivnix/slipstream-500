@@ -342,7 +342,7 @@ function assemble(caps, name, outName, total) {
     const m = loudness(auds.flatMap(f => ['-i', f]), pre.replace(/\[A(\d)\]/g, '[$1:a]'));
     const gain = (target - +m.input_i).toFixed(2);
     log(`ffmpeg: ${outName}${suffix}.mp4… (miks ${(+m.input_i).toFixed(1)} LUFS, LRA ${m.input_lra} → wzmocnienie ${gain} dB)`);
-    ff([...video, ...auds.flatMap(f => ['-i', f]), '-filter_complex', `${pre.replace(/\[A(\d)\]/g, (_, d) => `[${+d + 1}:a]`)},volume=${gain}dB,lowpass=f=16000:poles=2,aresample=192000,alimiter=limit=0.75:attack=1:release=80:level=disabled,aresample=48000[a]`,
+    ff([...video, ...auds.flatMap(f => ['-i', f]), '-filter_complex', `${pre.replace(/\[A(\d)\]/g, (_, d) => `[${+d + 1}:a]`)},volume=${gain}dB,lowpass=f=16000:poles=2,aresample=192000,alimiter=limit=0.8:attack=1:release=80:level=disabled,aresample=48000,afade=t=in:d=0.05[a]`,
       '-map', '0:v', '-map', '[a]', ...venc, ...aenc, '-t', total.toFixed(3), path.join(OUT, `${outName}${suffix}.mp4`)]);
   }
 }
