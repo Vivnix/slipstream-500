@@ -1097,6 +1097,7 @@
     sideLimit(dT) {
       const c = this.car, tr = this.race.track;
       let lo = tr.kind === 'road' ? -tr.halfW + 1.1 : -tr.halfW - 2, hi = tr.halfW - 1.1; this.hiCar = false;
+      let yt = null;
       for (const o of this.race.cars) {
         if (o === c || o.status === 'out') continue;
         const ds = tr.ds(c.s, o.s), dd = o.d - c.d;
@@ -1106,7 +1107,11 @@
         const ahead = (o.speed - c.speed) * 0.6;          // przewidywanie
         if (ds > CAR.length + 1.2 + Math.max(0, -ahead) || ds < -CAR.length - 1.2 - Math.max(0, ahead)) continue;
         if (o.d > c.d) { hi = Math.min(hi, o.d - this.sep); this.hiCar = true; } else lo = Math.max(lo, o.d + this.sep);
+        // tor drogowy: rywal obok, ale z przodu (zdrowy, jadący) — przed łukiem linia należy do niego, speed() każe się schować
+        if (tr.kind === 'road' && ds > 0.5 && o.status === 'racing' && o.speed > c.speed * 0.75 && Math.abs(angDiff(o.psi, tr.frame(o.s).th)) < 0.35 && (!yt || o.speed < yt.speed)) yt = o;
       }
+      // tor drogowy: sąsiad obok spycha z linii — speed() hamuje wtedy z wyprzedzeniem
+      this.yieldTo = yt; this.squeezed = tr.kind === 'road' && (lo > -tr.halfW + 1.15 || hi < tr.halfW - 1.15);
       if (lo > hi) { const m = (lo + hi) / 2; this.lo = this.hi = m; return m; }
       this.lo = lo; this.hi = hi;
       return clamp(dT, lo, hi);
@@ -1128,15 +1133,19 @@
         const dsp = pc ? tr.ds(c.s, pc.s) : -99;
         if (!pc || pc.status === 'out' || dsp < -(CAR.length + 3) || this.modeT > 14) { this.mode = 'line'; this.lane = null; this.passCar = null; }
         else if (dsp > 20 && this.modeT > 4) { this.mode = 'line'; this.lane = null; this.passCar = null; }
+        // tor drogowy: strefa hamowania tuż przed nami, a rywal wciąż z przodu — atak się nie uda, wracamy na linię za nim
+        else if (tr.kind === 'road' && dsp > -1 && this.brakeSoon(1.2)) { this.mode = 'line'; this.lane = null; this.passCar = null; this.cool = 3; }
         else if (this.modeT > 3 && dsp > CAR.length + 1 && c.speed <= pc.speed + 0.2 && this.laneFree(pc.d, -10, dsp - 3)) {
           // atak utknął bez pomocy z tyłu — wróć do tunelu za rywalem
-          this.mode = 'line'; this.lane = clamp(pc.d, -tr.halfW + 1.2, tr.halfW - 1.3); this.passCar = null; this.cool = 4;
+          // (tor drogowy: z powrotem na linię — stały pas obok linii to w ciasnym łuku jazda dużo wolniejsza niż auto za nami)
+          this.mode = 'line'; this.lane = tr.kind === 'road' ? null : clamp(pc.d, -tr.halfW + 1.2, tr.halfW - 1.3); this.passCar = null; this.cool = 4;
         }
         else return;
       }
       if (ahead) {
         const gap = aheadDs - CAR.length, closing = c.speed - ahead.speed;
-        const wrecked = ahead.status === 'dnf' || ahead.speed < c.speed * 0.6;
+        // tor drogowy: auto hamujące do ciasnego łuku jedzie o połowę wolniej, a nie stoi — wrak to dopiero auto obrócone / prawie stojące
+        const wrecked = ahead.status === 'dnf' || (tr.kind === 'road' ? ahead.speed < 8 || Math.abs(angDiff(ahead.psi, tr.frame(ahead.s).th)) > 0.6 : ahead.speed < c.speed * 0.6);
         const trig = wrecked ? 90 : clamp(closing * (1.2 + 1.6 * k) + 3 + (1 - k) * (Math.random() * 10 - 3), 2, 45);
         const drafting = tr.id !== 'short' && gap < 25 && c.draft > 0.12;
         const needRun = tr.id === 'speedway' ? 1.2 - 0.5 * k : 0.4 - 0.3 * k;
@@ -1145,6 +1154,8 @@
         if (!wantPass && drafting && k > 0.35 && gap < 4 + 6 * k && closing > 0.6 - 0.3 * k && !(this.cool > 0) && Math.random() < k * 0.25) wantPass = true;
         // manewr ustawia się przed zakrętem — w łuku tylko omijanie wraku
         if (wantPass && tr.inTurn(c.s) && !wrecked) wantPass = false;
+        // tor drogowy: atak tylko na prostej, na której zdąży się skończyć — nie w strefie hamowania (tam pas obok linii jest wolniejszy)
+        if (wantPass && !wrecked && tr.kind === 'road' && this.brakeSoon(2.5)) wantPass = false;
         if (wantPass) {
           const opts = [];
           for (const side of [-1, 1]) {
@@ -1160,7 +1171,9 @@
             }
             if (!free && Math.random() > 0.08 * (1 - k)) continue;      // słaby kierowca czasem wjedzie w zajęty pas
             if (!wrecked && !this.feasible(d)) continue;
-            const score = (side < 0 ? 0.6 : 0) + help * k * 1.5 + Math.random() * (1 - k) + (tr.inTurn(c.s + 60) && side < 0 ? 0.5 : 0);
+            let score = (side < 0 ? 0.6 : 0) + help * k * 1.5 + Math.random() * (1 - k) + (tr.inTurn(c.s + 60) && side < 0 ? 0.5 : 0);
+            // tor drogowy, wrak: objeżdżaj od strony, po której już jesteś, zamiast przecinać mu drogę
+            if (wrecked && tr.kind === 'road' && side === Math.sign(c.d - ahead.d)) score += 2;
             opts.push({ d, score });
           }
           if (opts.length) {
@@ -1208,10 +1221,17 @@
       const traffic = race.cars.some(o => o !== c && o.status !== 'out' && Math.abs(tr.ds(c.s, o.s)) < 22 && Math.abs(o.d - c.d) < 5);
       if (this.mode === 'line') {
         if (traffic && oval) { if (this.lane == null) { const d = clamp(this.dS, -tr.halfW + 1.2, tr.halfW - 1.3); if (this.feasible(d) || tr.inTurn(c.s)) this.lane = d; } }
-        else if (this.lane != null && this.laneFree(this.lineD(c.s + 20), -10, 20)) this.lane = null;
+        // (tor drogowy: bez stałych pasów — np. po starcie od razu z pasa startowego na linię; odstęp od sąsiadów trzyma sideLimit)
+        else if (this.lane != null && (!oval || this.laneFree(this.lineD(c.s + 20), -10, 20))) this.lane = null;
       }
     }
 
+    // czy w ciągu T sekund jazdy linią trzeba będzie wyraźnie hamować
+    brakeSoon(T) {
+      const c = this.car, u = c.u;
+      for (let x = 0; x <= u * T; x += 8) if (this.race.vAt(this.race.lines[this.lineName].v, c.s + x) * this.use < u * 0.9) return true;
+      return false;
+    }
     // czy da się jechać pasem d bez hamowania ponad możliwości (strefa hamowania / łuk tuż przed nami)
     feasible(d) {
       const c = this.car, u = c.u;
@@ -1264,21 +1284,37 @@
       let vt = 999;
       const gs = this.gripScale();
       const horizon = Math.max(60, u * u / (2 * this.decel) + 40);
+      // tor drogowy w ruchu (ktoś obok albo tuż przed nami): hamuj z wyprzedzeniem ~0,35 s — samotnie wjazd w łuk z lekkim nadmiarem
+      // prędkości ratuje hamowanie w łuku, ale w stawce nie zostaje wtedy zapasu na sąsiada, dotknięcie czy brudne powietrze
+      const lead = tr.kind === 'road' && (this.squeezed || (this.ahead && this.aheadDs < 3 + u * 0.4)) ? u * 0.35 : 0;
       for (let x = 0; x <= horizon; x += 8) {
         const v = this.vlim(c.s + x) * this.use * gs;
-        vt = Math.min(vt, Math.sqrt(v * v + 2 * this.decel * x));
+        vt = Math.min(vt, Math.sqrt(v * v + 2 * this.decel * Math.max(0, x - lead)));
       }
       if (c.status === 'finished') vt = Math.min(vt, 0.72 * this.vlim(c.s));
-      // podążanie za autem z przodu
-      const a = this.ahead;
-      if (a && a.status !== 'out' && this.mode !== 'pass') {
+      // podążanie za autem z przodu (tor drogowy: za każdym autem na mojej drodze, także w ataku — auto wybrane w decide()
+      // to tylko najbliższe linii 20 m dalej, a w szykanie i na dohamowaniu linia ucieka w bok od auta tuż przede mną)
+      const road = tr.kind === 'road';
+      for (const a of road ? race.cars : [this.ahead]) {
+        if (!a || a === c || a.status === 'out' || (this.mode === 'pass' && !road)) continue;
         const gap = tr.ds(c.s, a.s) - CAR.length;
-        if (Math.abs(a.d - c.d) < 2.2 && gap < 45) {
+        let dd = Math.abs(a.d - c.d);
+        if (road) {
+          if (gap <= -CAR.length + 0.5 || gap >= 45) continue;
+          // na mojej drodze: między mną a celem skrętu albo tam, gdzie będzie moja linia, kiedy do niego dojadę
+          const dAt = this.lane == null ? clamp(this.lineD(a.s), Math.min(this.lo, this.hi), Math.max(this.lo, this.hi)) : this.dS;
+          dd = Math.abs(a.d - clamp(a.d, Math.min(c.d, this.dS, dAt), Math.max(c.d, this.dS, dAt)));
+        }
+        if (dd < 2.2 && gap < 45) {
           const turnish = tr.inTurn(c.s) || tr.inTurn(c.s + 40);
           const want = tr.id === 'speedway' ? (turnish ? lerp(8, 2.2, k) : lerp(6, 0.3, k)) : tr.id === 'intermediate' ? lerp(8, 2.5, k) : (turnish ? lerp(8, 2.5, k) : lerp(8, 1.2, k));
           // prędkość, z której zdążę wytracić różnicę do auta z przodu na dostępnym dystansie
-          const room = gap - want, dec = 2.5 + 2.5 * k;
-          const vf = room > 0 ? a.speed + Math.sqrt(2 * dec * room) : a.speed + room * 1.5;
+          // (tor drogowy: rywal hamujący do łuku za chwilę jedzie wolniej, a sam hamując zabiera mi zapas opóźnienia)
+          const aBr = road ? Math.max(0, -a.axf) : 0, aV = a.speed - aBr * 0.35;
+          const room = gap - want, dec = road ? clamp(9 - aBr, 1, 2.5 + 2.5 * k) : 2.5 + 2.5 * k;
+          let vf = room > 0 ? aV + Math.sqrt(2 * dec * room) : aV + room * 1.5;
+          // stojący wrak, a cel skrętu już obok niego — tocz się dalej, żeby dało się go objechać (w miejscu auto nie skręci w bok)
+          if (road && a.speed < 6 && Math.abs(a.d - this.dS) > 2.4) vf = Math.max(vf, 4.5);
           vt = Math.min(vt, Math.max(0, vf));
         }
       }
@@ -1286,6 +1322,9 @@
         const gap = tr.ds(c.s, this.passCar.s) - CAR.length;
         if (gap > -2 && gap < 12) { const room = gap - lerp(3, 0.5, k); vt = Math.min(vt, this.passCar.speed + (room > 0 ? Math.sqrt(2 * 4 * room) : room * 1.5)); }
       }
+      // tor drogowy: w strefie hamowania i w łuku auto, które jest z tyłu „na zakładkę”, odpuszcza i chowa się za rywala
+      const y = this.yieldTo;
+      if (y && (vt < u - 0.5 || tr.inTurn(c.s) || tr.inTurn(c.s + u * 1.5))) vt = Math.min(vt, y.speed - 3);
       let [th, br] = this.pedals(vt);
       // auto wypycha na zewnątrz ponad zamierzoną linię (push) — odpuść gaz, zwłaszcza gdy ktoś jedzie wyżej
       const push = c.d - this.dS;
