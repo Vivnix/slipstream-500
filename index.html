@@ -2000,11 +2000,12 @@
   let focus = null, tvFocusT = 0, bannerT = 0, lastHud = 0, towerT = 0, skipping = false, spotState = { l: false, r: false, clearT: 0 };
   const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), camUp = new THREE.Vector3(0, 1, 0);
 
-  function newRace(opt) {
+  // built: gotowy wyścig z zewnątrz (nagrywanie wideo, tools/video) — tylko grafika, bez tworzenia symulacji
+  function newRace(opt, built) {
     podiumEnd();
     for (const v of visuals) { scene.remove(v.root); disposeCar(v.root); }
     for (const cr of crews) { scene.remove(cr.g); cr.sign.material.map.dispose(); if (cr.luigi) for (const f of [cr.luigi, cr.guido]) f.o.children[0].geometry.dispose(); }
-    const r = new Sim.Race(opt);
+    const r = built || new Sim.Race(opt);
     if (!world || world.track.id !== r.track.id) buildWorld(r.track);
     visuals = r.cars.map((c, i) => buildCar(c, i));
     crews = r.cars.map(c => buildCrew(c, r.track, c === (r.player || r.cars[0])));
@@ -3413,7 +3414,13 @@
 
   window.__s500 = { get race() { return race; }, camera, scene, renderer, gfx, setCam(m) { camMode = m; snapCam = true; },
     run(sec, keysDown) { Object.assign(keys, keysDown || {}); for (let t = 0; t < sec; t += 1 / 60) step(1 / 60); renderer.render(scene, camera); }, get visuals() { return visuals; },
-    get podium() { return pod; }, skipPodium() { podiumToResults(); } };
+    get podium() { return pod; }, skipPodium() { podiumToResults(); },
+    // nagrywanie wideo (tools/video): pokaż gotowy wyścig samych AI bez menu i HUD; krok symulacji liczy race.update nagrywarki
+    show(r) {
+      race = newRace(null, r); attract = null; state = 'race'; paused = false; skipping = false; focus = r.cars[0]; snapCam = true; buildMini(r.track);
+      for (const id of ['#menu', '#hud', '#results', '#pause']) $(id).hidden = true;
+    },
+    get focus() { return focus; }, set focus(c) { focus = c; snapCam = true; }, step(dt) { step(dt); }, get world() { return world; }, sky, sun };
   const boot = () => { startAttract(); requestAnimationFrame(frame); };
   // tekstury z numerami potrzebują załadowanej czcionki
   const fontsReady = document.fonts && document.fonts.load ? Promise.all([document.fonts.load('800 100px "Saira Condensed"'), document.fonts.load('600 16px "Barlow"')]).catch(() => {}) : Promise.resolve();
