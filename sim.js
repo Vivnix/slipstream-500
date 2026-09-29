@@ -44,12 +44,21 @@
   // Owale liczone analitycznie. Tory drogowe: łamana z mapy (px, oś y w dół) o zaokrąglonych narożnikach,
   // path: [x, y, promień narożnika w px, przechyłka łuku°, przechyłka prostej za narożnikiem°] — przechyłka podnosi zewnętrzną stronę łuku.
   // pitS: [wjazd, wyjazd, pierwszy boks, ostatni boks] w metrach względem linii mety; pitSide: +1 = pit lane po prawej.
+  // plate: superspeedway (gaz w podłodze przez całe okrążenie) — AI jeździ pasami w pociągu, bez odpuszczania w łukach.
   const TRACKS = {
     speedway: {
-      id: 'speedway', kind: 'oval', name: 'Superspeedway', tag: '2,5 mili · 31°',
+      id: 'speedway', kind: 'oval', plate: true, name: 'Superspeedway', tag: '2,5 mili · 31°',
       blurb: 'Gaz do dechy przez całe okrążenie. Samotnie jesteś wolny — w pociągu tunelu aerodynamicznego leci się o kilkanaście km/h szybciej.',
       L: 1000, R: 325, W: 20, bankTurn: 31, bankStraight: 4, prog: 3, apron: 9, grass: 40,
       power: 388000, cdA: 0.95, clA: 1.9, vGear: 200, transition: 240, laps: 8, lapsOpt: [4, 8, 16], pace: 40, pitLimit: 25,
+    },
+    // tri-owal: R = promień łuku na osi toru, tri = kąt załamania prostej startowej (°), triLen = długość łuku tri-owalu,
+    // spiral = długość klotoid wejścia/wyjścia, front = prosta między tri-owalem a łukiem, pitBox = środek stanowisk względem mety
+    dis: {
+      id: 'dis', kind: 'oval', plate: true, name: 'Daytona Speedway', tag: '2,5 mili · 31° · tri-owal',
+      blurb: 'Prawdziwa Daytona: łuki 31°, prosta przeciwległa prawie płaska, a meta na wierzchołku tri-owalu przechylonego o 18°. Pociąg w tunelu aerodynamicznym, trzy rzędy obok siebie i szarża do linii na ostatnim okrążeniu.',
+      tri: 24, R: 318, triLen: 380, spiral: 150, front: 314, W: 20, bankTurn: 31, bankFront: 18, bankBack: 2, prog: 3, apron: 9, grass: 40, pitBox: 70,
+      power: 388000, cdA: 0.95, clA: 1.9, vGear: 200, transition: 300, laps: 8, lapsOpt: [4, 8, 16], pace: 40, pitLimit: 25,
     },
     intermediate: {
       id: 'intermediate', kind: 'oval', name: 'Owal 1,5 mili', tag: '1,47 mili · 22°',
@@ -173,6 +182,114 @@
     ds(a, b) { let x = b - a; if (x > this.len / 2) x -= this.len; else if (x < -this.len / 2) x += this.len; return x; }
   }
   function inPit(tr, s, d) { const P = tr.pit, dd = d * P.side; return dd >= P.edge - 0.2 && dd <= P.outer && inRange(tr, s, P.inS, P.outS); }
+
+  // ───────────────────────────── TRI-OWAL ─────────────────────────────
+  // Owal z tri-owalem (jak Daytona): prosta startowa wybrzuszona na zewnątrz łagodnym łukiem, meta na jego wierzchołku.
+  // Zadana jest krzywizna wzdłuż toru — gładki „garb” tri-owalu, prosta, klotoida, łuk o promieniu R, klotoida, prosta przeciwległa —
+  // a kierunek i położenie wynikają z całkowania. Tor jest symetryczny względem osi y, więc zamyka się sam: długość prostej
+  // przeciwległej wynika z reszty. Próbki co ~1 m (jak tor drogowy); poza geometrią wszystko jak w owalu (Track):
+  // przechyłka łuków narasta łagodnie (turnFactor), pobocze, trawa i aleja serwisowa po wewnętrznej, banda tuż za krawędzią.
+  class TriOval {
+    constructor(def) {
+      Object.assign(this, def);
+      this.halfW = this.W / 2;
+      this.outerWall = this.halfW + 0.3;
+      this.innerWall = -(this.halfW + this.apron + this.grass);
+      this.bT = this.bankTurn * DEG; this.bF = this.bankFront * DEG; this.bB = this.bankBack * DEG; this.bP = this.prog * DEG;
+      const R = this.R, al = this.tri * DEG, Lt = this.triLen, c = this.spiral, a = this.front;
+      // połowa okrążenia od wierzchołka tri-owalu: u1 = początek klotoidy wejścia w łuk 1, u2 = początek klotoidy wyjścia, u3 = koniec łuku
+      const arcL = R * (PI - al / 2) - c, u1 = Lt / 2 + a, u2 = u1 + c + arcL, u3 = u2 + c;
+      if (arcL <= 0 || a < 0) throw new Error(`${this.id}: zła geometria tri-owalu`);
+      // kierunek jazdy (całka krzywizny) — analitycznie
+      const thAt = u => {
+        if (u <= Lt / 2) return al / Lt * (u + Lt / (2 * PI) * Math.sin(2 * PI * u / Lt));
+        if (u <= u1) return al / 2;
+        if (u <= u1 + c) { const x = u - u1; return al / 2 + x * x / (2 * c * R); }
+        if (u <= u2) return al / 2 + c / (2 * R) + (u - u1 - c) / R;
+        if (u <= u3) { const x = u - u2; return PI - c / (2 * R) + (x - x * x / (2 * c)) / R; }
+        return PI;
+      };
+      // położenie: Simpson na odcinkach ≤ 0,5 m
+      const P = [{ u: 0, x: 0, y: 0 }], step = (p, u) => {
+        const m = Math.max(2, 2 * Math.ceil((u - p.u) / 1)), hh = (u - p.u) / m;
+        let sx = 0, sy = 0;
+        for (let j = 0; j <= m; j++) { const w = j === 0 || j === m ? 1 : j % 2 ? 4 : 2, t = thAt(p.u + j * hh); sx += w * Math.cos(t); sy += w * Math.sin(t); }
+        return { u, x: p.x + sx * hh / 3, y: p.y + sy * hh / 3 };
+      };
+      const end = step(step(step(step(P[0], Lt / 2), u1), u1 + c), u2), e3 = step(end, u3);
+      const Hl = u3 + e3.x;                                    // pół okrążenia: prosta przeciwległa kończy się na osi y
+      this.len = 2 * Hl; this.Lb = 2 * e3.x;
+      const n = this.n = Math.round(this.len), h = this.h = this.len / n;
+      const X = this.X = new Float64Array(n), Y = this.Y = new Float64Array(n), TH = this.TH = new Float64Array(n), K = this.K = new Float32Array(n);
+      const kAt = u => u <= Lt / 2 ? al / Lt * (1 + Math.cos(2 * PI * u / Lt)) : u <= u1 ? 0 : u <= u1 + c ? (u - u1) / (c * R) : u <= u2 ? 1 / R : u <= u3 ? (u3 - u) / (c * R) : 0;
+      let p = P[0];
+      for (let i = 0; i < n; i++) {
+        const s = i * h, u = s <= Hl ? s : this.len - s;
+        if (s <= Hl) {
+          if (u <= u3) { p = step(p, u); X[i] = p.x; Y[i] = p.y; } else { X[i] = e3.x - (u - u3); Y[i] = e3.y; }
+          TH[i] = thAt(u);
+        } else {
+          // druga połowa: lustro pierwszej (x → −x, kierunek → 2π − θ)
+          const j = Math.round(u / h); X[i] = -X[j]; Y[i] = Y[j]; TH[i] = 2 * PI - TH[j];
+        }
+        K[i] = kAt(u);
+      }
+      // środki łuków na y = 0 (owal wyśrodkowany jak Track)
+      const q = step(step(step(P[0], Lt / 2), u1), u1 + c), t1 = thAt(u1 + c), cy = q.y + R * Math.cos(t1);
+      for (let i = 0; i < n; i++) Y[i] -= cy;
+      this.L = 2 * (q.x - R * Math.sin(t1));                   // odstęp środków łuków (jak L owalu)
+      const NX = this.NX = new Float64Array(n), NY = this.NY = new Float64Array(n);
+      for (let i = 0; i < n; i++) { NX[i] = Math.sin(TH[i]); NY[i] = -Math.cos(TH[i]); }
+      // dla AI łuk trwa od początku klotoidy wejścia do końca klotoidy wyjścia (auto już skręca — nie pora na zmianę pasa);
+      // przechyłka narasta wokół połowy klotoid, a przechyłka prostej startowej / przeciwległej przełącza się w środku łuku
+      const ta = u1 + c / 2, tb = u2 + c / 2;
+      this.turns = [[u1, u3], [this.len - u3, this.len - u1]];
+      this.bankTurns = [[ta, tb], [this.len - tb, this.len - ta]];
+      this.midS = [(ta + tb) / 2, this.len - (ta + tb) / 2];
+      this.pitSide = -1;
+      const Lf = 2 * ta, bx = Math.min(0.36 * Lf, 110);
+      pitLayout(this, -ta - Math.min(0.3 * PI * R, 70), ta + 0.3 * PI * R, this.pitBox - bx, this.pitBox + bx);
+      let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+      for (let i = 0; i < n; i++) { const x = X[i] + NX[i] * this.halfW, y = Y[i] + NY[i] * this.halfW; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+      this.bounds = { x0, x1, y0, y1 };
+      this.podiumD = this.innerWall - 24;
+    }
+    // jak w torze drogowym, ale odcinek wzdłuż stycznej na odsunięciu d przeliczony na oś (łuk na odsunięciu jest dłuższy o 1 + k·d) —
+    // powrót toLocal(toWorld(s, d)) z dokładnością do milimetrów także w alei serwisowej
+    toLocal(x, y, hint) {
+      const n = this.n, X = this.X, Y = this.Y, d2 = i => { i = mod(i, n); return (X[i] - x) ** 2 + (Y[i] - y) ** 2; };
+      let i;
+      if (hint != null) i = Math.round(mod(hint, this.len) / this.h) % n;
+      else { let b = 1e18; i = 0; for (let j = 0; j < n; j += 8) { const q = d2(j); if (q < b) { b = q; i = j; } } }
+      let best = d2(i);
+      for (let it = 0; it < 400; it++) { const a = d2(i + 1), b = d2(i - 1); if (a < best) { i++; best = a; } else if (b < best) { i--; best = b; } else break; }
+      i = mod(i, n);
+      const dx = x - X[i], dy = y - Y[i], d = dx * this.NX[i] + dy * this.NY[i];
+      return { s: mod(i * this.h + (dx * -this.NY[i] + dy * this.NX[i]) / Math.max(0.3, 1 + this.K[i] * d), this.len), d };
+    }
+    // 0 poza łukiem … 1 w łuku, łagodnie na długości transition (jak Track.turnFactor, ale wokół połowy klotoid)
+    turnFactor(s) {
+      let best = 0;
+      for (const [a, b] of this.bankTurns) {
+        const p = mod(s - a, this.len), span = b - a;
+        const inside = p <= span ? Math.min(p, span - p) : -Math.min(p - span, this.len - p);
+        best = Math.max(best, smooth(clamp(inside / this.transition + 0.5, 0, 1)));
+      }
+      return best;
+    }
+    // przechyłka osi toru: łuk bT, poza łukiem prosta startowa (tri-owal) bF albo przeciwległa bB
+    bankC(s, f) { const m = mod(s, this.len); return lerp(m > this.midS[0] && m < this.midS[1] ? this.bB : this.bF, this.bT, f); }
+    bank(s, d) {
+      if (d < -this.halfW) return 0;
+      const f = this.turnFactor(s), t = clamp((d + this.halfW) / this.W, 0, 1);
+      return this.bankC(s, f) + this.bP * f * (t - 0.5);
+    }
+    height(s, d) {
+      if (d < -this.halfW) return 0;
+      const f = this.turnFactor(s), dd = Math.min(d, this.halfW) + this.halfW, t = dd / this.W;
+      return dd * Math.tan(this.bankC(s, f) + this.bP * f * (t / 2 - 0.5));
+    }
+  }
 
   // ───────────────────────────── TOR DROGOWY ─────────────────────────────
   const pathCache = {};
@@ -328,8 +445,12 @@
     resetD() { return this.pitSide * -(this.halfW - 1.6); }
     ds(a, b) { let x = b - a; if (x > this.len / 2) x -= this.len; else if (x < -this.len / 2) x += this.len; return x; }
   }
+  // tri-owal: próbkowana oś jak w torze drogowym, zachowanie na torze jak w owalu
+  for (const m of ['at', 'frame', 'toWorld', 'kappa', 'ds']) TriOval.prototype[m] = PathTrack.prototype[m];
+  for (const m of ['inTurn', 'wallIn', 'wallOut', 'surface', 'resetD']) TriOval.prototype[m] = Track.prototype[m];
   function makeTrack(id) {
     const def = TRACKS[id] || TRACKS.speedway;
+    if (def.tri) return pathCache[def.id] || (pathCache[def.id] = new TriOval(def));
     if (def.kind !== 'road') return new Track(def);
     return pathCache[def.id] || (pathCache[def.id] = new PathTrack(def));
   }
@@ -1043,9 +1164,9 @@
       this.wander = (1 - k) * 0.9;
       this.ph = [Math.random() * 9, Math.random() * 9, Math.random() * 9];
       const lines = race.lines;
-      // na superspeedwayu jeździ się pasami (dół / środek / góra), nie „linią wyścigową”
-      const names = race.track.id === 'speedway' ? ['bottom', 'bottom', 'second', 'top'] : Object.keys(lines);
-      const best = race.track.id === 'speedway' ? 'bottom' : race.bestLine;
+      // na superspeedwayu (plate) jeździ się pasami (dół / środek / góra), nie „linią wyścigową”
+      const names = race.track.plate ? ['bottom', 'bottom', 'second', 'top'] : Object.keys(lines);
+      const best = race.track.plate ? 'bottom' : race.bestLine;
       this.lineName = Math.random() < 0.3 + 0.7 * k ? best : names[Math.floor(Math.random() * names.length)];
       // tor drogowy: linia „mid” (60% szerokości) jest o 6–10% wolniejsza — nie do wyprzedzenia korek; słabszy jedzie najwyżej „wide”
       if (race.track.kind === 'road' && this.lineName === 'mid') this.lineName = 'wide';
@@ -1087,7 +1208,8 @@
       let dT = clamp(this.planD(c.s + 15), -tr.halfW + 1.15, tr.halfW - 1.25);
       if (c.status === 'finished') dT = clamp(this.lineD(c.s), -tr.halfW + 1.2, tr.halfW - 1.3);
       // owal (poza superspeedwayem): w łuku auto na granicy przyczepności ucieka w górę toru — pas wyżej niż górna linia to jazda po bandzie
-      const lim = tr.kind === 'oval' && tr.id !== 'speedway';
+      // (tri-owal Daytony też: łuki o mniejszym promieniu i wejście po klotoidzie — pociąg pod samą bandą ociera się o nią przez cały łuk)
+      const lim = tr.kind === 'oval' && (!tr.plate || !!tr.tri);
       if (lim && (tr.inTurn(c.s) || tr.inTurn(c.s + c.u))) dT = Math.min(dT, tr.halfW - 2.4);
       dT = this.sideLimit(dT);
       // w łuku zjazd w dół (zacieśnianie promienia) tylko powoli; na zewnątrz swobodniej
@@ -1172,7 +1294,7 @@
         if (tr.kind === 'road' && !wrecked) { if (this.roadAttack(ahead, aheadDs)) return; }
         const trig = wrecked ? 90 : clamp(closing * (1.2 + 1.6 * k) + 3 + (1 - k) * (Math.random() * 10 - 3), 2, 45);
         const drafting = tr.id !== 'short' && gap < 25 && c.draft > 0.12;
-        const needRun = tr.id === 'speedway' ? 1.2 - 0.5 * k : 0.4 - 0.3 * k;
+        const needRun = tr.plate ? 1.2 - 0.5 * k : 0.4 - 0.3 * k;
         let wantPass = gap < trig && (closing > needRun || wrecked) && !(this.cool > 0);
         // slingshot: dobry kierowca wychodzi z tunelu z nadwyżką prędkości tuż za rywalem
         if (!wantPass && drafting && k > 0.35 && gap < 4 + 6 * k && closing > 0.6 - 0.3 * k && !(this.cool > 0) && Math.random() < k * 0.25) wantPass = true;
@@ -1362,13 +1484,13 @@
       // patrzy do środka, a auto sunie w górę toru — według nosa kierowca uznałby, że trzyma linię, i dojechałby do ściany.
       // (Na superspeedwayu auto nie dochodzi do granicy przyczepności, a w ciasnym pociągu poprawka tylko szkodzi;
       // na owalu 1,5 mili także w pasie — w stawce auto sunie w górę tak samo, prosto w rywala albo w bandę)
-      const beta = tr.kind === 'oval' && tr.id !== 'speedway' && u > 45 && (this.lane == null || tr.id === 'intermediate') && tr.inTurn(c.s) && c.hit < 0.05 ? clamp(Math.atan2(c.v, u), -0.05, 0.05) : 0;
+      const beta = tr.kind === 'oval' && !tr.plate && u > 45 && (this.lane == null || tr.id === 'intermediate') && tr.inTurn(c.s) && c.hit < 0.05 ? clamp(Math.atan2(c.v, u), -0.05, 0.05) : 0;
       const chi = c.psi + beta, cp = Math.cos(chi), sp = Math.sin(chi);
       const dx = (p.x - c.x) * cp + (p.y - c.y) * sp, dy = -(p.x - c.x) * sp + (p.y - c.y) * cp;
       const kap = 2 * dy / (dx * dx + dy * dy);
       const rDes = u * kap;
       // człon całkujący błąd boczny — kompensuje podsterowność w długim łuku (na owalu także na linii: bez niego auto jedzie łuk ~1 m wyżej)
-      const hold = this.lane != null || (tr.kind === 'oval' && tr.id !== 'speedway'), eLat = hold ? c.d - this.dS : 0;
+      const hold = this.lane != null || (tr.kind === 'oval' && !tr.plate), eLat = hold ? c.d - this.dS : 0;
       this.iLat = clamp((this.iLat || 0) * (hold ? 1 : 1 - dt) + eLat * dt, -2, 2);
       let dl = Math.atan(CAR.wb * kap) + 0.09 * (rDes - c.r) + 0.0025 * eLat + 0.004 * this.iLat;
       // kontra przy uślizgu tyłu (lepszy kierowca szybciej i dokładniej)
@@ -1413,7 +1535,7 @@
         if (dd < 2.2 && gap < 45) {
           if (!road) fol = a;
           const turnish = tr.inTurn(c.s) || tr.inTurn(c.s + 40);
-          const want = tr.id === 'speedway' ? (turnish ? lerp(8, 2.2, k) : lerp(6, 0.3, k)) : tr.id === 'intermediate' ? lerp(8, 2.5, k) : (turnish ? lerp(8, 2.5, k) : lerp(8, 1.2, k));
+          const want = tr.plate ? (turnish ? lerp(8, 2.2, k) : lerp(6, 0.3, k)) : tr.id === 'intermediate' ? lerp(8, 2.5, k) : (turnish ? lerp(8, 2.5, k) : lerp(8, 1.2, k));
           // prędkość, z której zdążę wytracić różnicę do auta z przodu na dostępnym dystansie
           // (tor drogowy: rywal hamujący do łuku za chwilę jedzie wolniej, a sam hamując zabiera mi zapas opóźnienia)
           const aBr = road ? Math.max(0, -a.axf) : 0, aV = a.speed - aBr * 0.35;
@@ -1453,7 +1575,7 @@
       if (packTrack(tr) && tr.id !== 'intermediate' && push > 0.25 && tr.inTurn(c.s) && c.d > tr.halfW - 2) th *= clamp(1 - (push - 0.25) * (1.5 + 3 * k), 0, 1);
       if (this.wallSq) th *= 0.5;
       // owal: podsterowne auto sunie w łuku na bandę (z prędkością w bok vd) — odpuść gaz, zanim dotknie ściany (bez tego jedzie po bandzie z gazem w podłodze)
-      if (tr.kind === 'oval' && tr.id !== 'speedway' && tr.inTurn(c.s) && Math.abs(c.slipF) > Math.abs(c.slipR)) {
+      if (tr.kind === 'oval' && !tr.plate && tr.inTurn(c.s) && Math.abs(c.slipF) > Math.abs(c.slipR)) {
         const f = tr.frame(c.s), vd = c.vx * f.nx + c.vy * f.ny, room = tr.wallOut(c.s) - c.d - Math.max(0, vd) * 0.8;
         th *= clamp((room - 1.05) / 0.6, 0, 1);
       }
@@ -1515,7 +1637,7 @@
       }
       let aeroLoss = (0.25 + 0.2 * this.k) * Math.max(c.dirty, loose);
       // owal: na prostej brudne powietrze działa w 40%, aero-loose w 30% — przed łukiem licz już z pełnym, inaczej kierowca hamuje dopiero w łuku i wypycha go na bandę
-      if (tr.kind === 'oval' && tr.id !== 'speedway') {
+      if (tr.kind === 'oval' && !tr.plate) {
         const ant = !tr.inTurn(c.s) && tr.inTurn(c.s + c.u * 2);
         // (krótki owal: mniejszy docisk, więc i strata mniejsza — z pełnym zapasem auto za rywalem nie dojeżdża do niego i nie wyprzedza)
         aeroLoss = (tr.id === 'short' ? 0.25 + 0.2 * this.k : 0.6) * Math.max(ant ? Math.min(0.38, c.dirty / 0.4) : c.dirty, ant ? Math.min(0.32, c.aeroLoose / 0.3) : c.aeroLoose);
@@ -1560,7 +1682,8 @@
         if (toIn > -5 && vIn < 60) vb = Math.min(vb, Math.sqrt(vIn * vIn + 2 * 6 * Math.max(0, toIn)));
         vt = Math.min(this.horizonV(clamp(this.dS, -tr.halfW, tr.halfW)), this.horizonV(clamp(dT, -tr.halfW, tr.halfW)), vb);
         // owal: aleja zaczyna się jeszcze w łuku, a pobocze i aleja są płaskie — zejście z przechyłki tylko z prędkością płaskiego łuku
-        if (tr.kind === 'oval') for (let x = 0; x <= 160; x += 8) { const s = c.s + x; if (inRange(tr, s, P.inS, P.outS) && tr.inTurn(s)) vt = Math.min(vt, Math.sqrt((cornerSpeed(tr, tr.kappa(s, sd * P.edge), 0) * this.use * this.gripScale()) ** 2 + 2 * this.decel * 0.7 * x)); }
+        // (tri-owal: aleja biegnie też przez łuk tri-owalu — hamowanie z pełnej prędkości na płaskim łuku)
+        if (tr.kind === 'oval') for (let x = 0; x <= 160; x += 8) { const s = c.s + x; if (inRange(tr, s, P.inS, P.outS) && (tr.inTurn(s) || tr.tri)) vt = Math.min(vt, Math.sqrt((cornerSpeed(tr, tr.kappa(s, sd * P.edge), 0) * this.use * this.gripScale()) ** 2 + 2 * this.decel * 0.7 * x)); }
         // nie zdążył przejechać przed murkiem alei — objazd i próba na następnym okrążeniu
         if (inRange(tr, c.s, P.wallA, P.wallB) && c.d * sd < P.wallD) { c.pit = null; c.pitReq = true; this.reset(); return this.update(0); }
         // zatrzymanie tylko na stanowisku (w pasie stanowisk), nigdy w pasie jazdy
@@ -1575,8 +1698,13 @@
       } else {
         const past = tr.ds(P.lineB, c.s) > 0;
         dT = past ? sd * (tr.halfW - 1.4) : sd * (toBox > -3 ? P.boxD : P.driveD);
+        // tri-owal: stanowiska kończą się przed łukiem 1 — rozpędzanie po płaskim poboczu, włączenie do ruchu dopiero w łuku
+        // (jak na superspeedwayu; na prostej pociąg wyprzedzający dołem wjechałby w wolne auto wspinające się z pobocza)
+        if (past && tr.tri && !tr.inTurn(c.s + 30) && tr.ds(c.s, P.outS) > 0) dT = sd * (tr.halfW + tr.apron * 0.5);
         rate = past ? 3 : 4;
         vt = past ? this.horizonV(this.dS) : Math.min(P.limit, 3 + Math.max(0, -toBox) * 0.8);
+        // tri-owal: wyjazd z alei po płaskim w łuk 1 — rozpędzanie tylko do prędkości płaskiego łuku, dopóki auto nie wjedzie na przechyłkę
+        if (past && tr.tri && c.d * sd > tr.halfW) for (let x = 0; x <= 160; x += 8) vt = Math.min(vt, Math.sqrt((cornerSpeed(tr, tr.kappa(c.s + x, c.d), 0) * this.use * this.gripScale()) ** 2 + 2 * this.decel * 0.7 * x));
         if (past && (Math.abs(c.d) < tr.halfW - 0.3 || tr.ds(P.outS, c.s) > 120)) { c.pit = null; this.reset(); return this.update(0); }
       }
       // nie wjeżdżaj w auto przed sobą (droga hamowania, nie stały odstęp) i nie zjeżdżaj w bok na auto obok;
