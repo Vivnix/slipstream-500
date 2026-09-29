@@ -49,7 +49,7 @@
   .chip { left: calc(4 * var(--u)); bottom: calc(7 * var(--u)); display: flex; align-items: stretch; filter: drop-shadow(0 calc(.4 * var(--u)) calc(1.2 * var(--u)) rgba(0,0,0,.5)); }
   .chip span { font: 700 calc(1.7 * var(--u))/1 var(--body); letter-spacing: .16em; text-transform: uppercase; background: rgba(10,11,14,.88); color: var(--green); padding: 0 calc(1.2 * var(--u)); display: flex; align-items: center; transform: skewX(-9deg); }
   .chip b { font: 800 calc(4.8 * var(--u))/1 var(--display); text-transform: uppercase; letter-spacing: .03em; background: var(--caution); color: var(--caution-ink); padding: calc(.8 * var(--u)) calc(2 * var(--u)) calc(.5 * var(--u)); transform: skewX(-9deg); margin-left: calc(-.2 * var(--u)); white-space: nowrap; }
-  .portrait .chip { bottom: 17%; }
+  .portrait .chip { bottom: 17%; } .portrait .chip b { font-size: calc(6 * var(--u)); }
 
   /* rozdział: krótko, u góry, znika przed akcją */
   .chapter { right: calc(4 * var(--u)); top: calc(4 * var(--u)); display: flex; align-items: flex-end; gap: calc(1.2 * var(--u)); transform-origin: right top; }
@@ -83,7 +83,7 @@
   .slam { inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(1.6 * var(--u)); }
   .slam .big { font: 800 calc(30 * var(--u))/.8 var(--display); color: var(--caution); text-shadow: 0 calc(.8 * var(--u)) calc(5 * var(--u)) rgba(0,0,0,.8); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .slam .lbl { font: 800 calc(7.4 * var(--u))/1 var(--display); text-transform: uppercase; letter-spacing: .02em; background: var(--flag-white); color: #111; padding: calc(.8 * var(--u)) calc(2.6 * var(--u)) calc(.5 * var(--u)); transform: skewX(-9deg); white-space: nowrap; }
-  .portrait .slam .big { font-size: calc(34 * var(--u)); } .portrait .slam .lbl { font-size: calc(7.8 * var(--u)); }
+  .portrait .slam .big { font-size: calc(27 * var(--u)); } .portrait .slam .lbl { font-size: calc(7.8 * var(--u)); }
 
   /* tytuł i logo na końcu */
   .title { inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(1.4 * var(--u)); }
@@ -93,8 +93,8 @@
   .title h2 { margin: 0; font: 800 calc(7 * var(--u))/1 var(--display); letter-spacing: .12em; text-transform: uppercase; background: var(--caution); color: var(--caution-ink); padding: calc(.7 * var(--u)) calc(3 * var(--u)) calc(.4 * var(--u)); transform: skewX(-9deg); }
   .title p { margin: calc(1.6 * var(--u)) 0 0; font: 800 calc(6.6 * var(--u))/1 var(--display); letter-spacing: .03em; text-transform: uppercase; color: #fff; background: rgba(10,11,14,.88); padding: calc(.9 * var(--u)) calc(2.4 * var(--u)) calc(.5 * var(--u)); white-space: nowrap; }
   .title p em { font-style: normal; color: var(--caution); }
-  .portrait .title h1 { font-size: calc(13.5 * var(--u)); }
-  .portrait .title p { font-size: calc(6.2 * var(--u)); display: flex; flex-direction: column; align-items: center; gap: calc(1 * var(--u)); }
+  .portrait .title h1 { font-size: calc(17 * var(--u)); } .portrait .title h2 { font-size: calc(9 * var(--u)); } .portrait .title .checker { width: calc(40 * var(--u)); }
+  .portrait .title p { font-size: calc(9 * var(--u)); display: flex; flex-direction: column; align-items: center; gap: calc(1 * var(--u)); }
 </style>
 <svg width="0" height="0" style="position:absolute"><filter id="mblur" x="-10%" y="0" width="120%" height="100%"><feGaussianBlur id="mblurG" stdDeviation="0 0"/></filter></svg>
 <div id="stage"><div id="views"></div><div class="divider"></div><div id="ov"></div></div>
@@ -183,7 +183,13 @@
     } else if (cam.type === 'track') {          // nisko, z boku, jak samochód z kamerą
       const h = P ? Math.max(cam.h || 1.3, cam.hP || 1.8) : (cam.h || 1.3);
       // nie za bandą: na owalu ściana stoi tuż za krawędzią asfaltu (w przechylonym łuku kamera wjechałaby w beton)
-      const wl = (tr.wallOut ? tr.wallOut(st.s) : tr.halfW + 3) - 1.2, dc = clamp(st.d + (cam.side || 6), -Math.min(wl, tr.halfW + 3), wl);
+      // auto: kamera po tej stronie auta, gdzie obok nie jedzie inne auto (w stawce z boku kamera wjechałaby w sąsiada)
+      if (st.side == null) {
+        let l = 0, r = 0;
+        if (cam.auto) for (const o of race.cars) { if (o === c) continue; let ds = o.s - c.s; ds -= Math.round(ds / tr.len) * tr.len; if (Math.abs(ds) > 14) continue; if (o.d > c.d + 1) r++; else if (o.d < c.d - 1) l++; }
+        const sd = cam.side != null ? cam.side : 6; st.side = cam.auto ? (r <= l ? 1 : -1) * Math.abs(sd) : sd;
+      }
+      const wl = (tr.wallOut ? tr.wallOut(st.s) : tr.halfW + 3) - 1.2, dc = clamp(st.d + st.side, -Math.min(wl, tr.halfW + 3), wl);
       pos = W(tr, st.s - (cam.back || 8), dc, h);
       look = W(tr, st.s + (cam.lead || 10), st.d, 0.9);
     } else if (cam.type === 'tripod') {         // statyw przy torze: stoi, obraca się za autem i przybliża

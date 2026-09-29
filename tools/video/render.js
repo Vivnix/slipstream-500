@@ -229,7 +229,7 @@ function edl(S, B, P) {
     ov: [PO, ...(stats.sp ? [{ type: 'stat', value: stats.sp.value, unit: '%', label: stats.sp.label, from: b(1), to: b(6) - 3, out: 4, pos: 'top', x: 0.68 }] : [])],
     sfx: { hits: stats.sp ? [[b(1), 0.7]] : [] } });
   // owal: nisko na bandzie — auto starego AI szoruje o ścianę tuż pod kamerą; nowe AI przejeżdża z odstępem
-  const sc = S.scOld, wallCam = { type: 'tripod', aheadT: 1.5, wall: sc.side || 1, off: -0.6, h: 2.3, size: 5, maxFov: 70 };
+  const sc = S.scOld, wallCam = { type: 'tripod', aheadT: 1.5, wall: sc.side || 1, off: -0.9, h: 2.5, size: 5, maxFov: 70 };
   const sp5 = [[0, 1], [70, 1], [80, 0.3], [150, 0.3], [162, 1]];
   const v5 = view(sc, wallCam, { t0: +(sc.t - 0.3).toFixed(2), speed: sp5 });
   shot('05-owal-przed', 8, { views: [v5], ov: [PRZED, CH('02', 'Owal 1,5 mili')], sfx: { hits: [[b(3), 0.45]] } });
@@ -256,12 +256,15 @@ function edl(S, B, P) {
   }
 
   // ── 4. montaż nowego AI: coraz krótsze ujęcia, nisko i szybko; uderzenie na każdym cięciu ──
-  const trackR = { type: 'track', back: 5, side: 3, h: 0.6, lead: 12, fov: 75 }, trackL = Object.assign({}, trackR, { side: -3 });
-  const heliLow = { type: 'heli', back: 8, up: 2.5, lead: 12, fov: 68 }, hood = { type: 'game', mode: 2 };
+  // kamera przy torze: nisko z boku, po stronie wolnej od sąsiadów; za stawką trzema rzędami — prosto z tyłu, nad dachami
+  const trackR = { type: 'track', back: 5, side: 3, auto: true, h: 0.6, lead: 12, fov: 75 }, trackL = Object.assign({}, trackR, { side: -3 });
+  const chase = { type: 'track', back: 7, side: 0, h: 2.3, lead: 16, fov: 70 };
+  const heliLow = { type: 'heli', back: 8, up: 2.5, lead: 12, fov: 68 }, heliPass = { type: 'heli', back: 10, up: 3.4, lead: 12, fov: 66 };
+  const hood = P ? trackL : { type: 'game', mode: 2 };   // kamera z dachu w pionie pokazuje głównie niebo
   const M = [
-    [[S.wide], trackR, 6, 1.4, 'Trzy rzędy.'],
+    [[S.wide], chase, 6, 1.4, 'Trzy rzędy.'],
     [[S.side], heliLow, 4, 1.3, 'Koło w koło.'],
-    [[S.pass], trackL, 4, 1.4, 'Czyste wyprzedzenie.'],
+    [[S.pass], heliPass, 4, 1.4, 'Czyste wyprzedzenie.'],
     [[S.pack], heliLow, 2, 1.5],
     [[S.side, S.pass], hood, 2, 1.3],
     [[S.wide], trackL, 2, 1.5],
@@ -338,7 +341,7 @@ function assemble(caps, name, outName, total) {
     const m = loudness(auds.flatMap(f => ['-i', f]), pre.replace(/\[A(\d)\]/g, '[$1:a]'));
     const gain = (target - +m.input_i).toFixed(2);
     log(`ffmpeg: ${outName}${suffix}.mp4… (miks ${(+m.input_i).toFixed(1)} LUFS, LRA ${m.input_lra} → wzmocnienie ${gain} dB)`);
-    ff([...video, ...auds.flatMap(f => ['-i', f]), '-filter_complex', `${pre.replace(/\[A(\d)\]/g, (_, d) => `[${+d + 1}:a]`)},volume=${gain}dB,alimiter=limit=0.84:attack=1:release=80:level=disabled[a]`,
+    ff([...video, ...auds.flatMap(f => ['-i', f]), '-filter_complex', `${pre.replace(/\[A(\d)\]/g, (_, d) => `[${+d + 1}:a]`)},volume=${gain}dB,aresample=192000,alimiter=limit=0.8:attack=1:release=80:level=disabled,aresample=48000[a]`,
       '-map', '0:v', '-map', '[a]', ...venc, ...aenc, '-t', total.toFixed(3), path.join(OUT, `${outName}${suffix}.mp4`)]);
   }
 }
