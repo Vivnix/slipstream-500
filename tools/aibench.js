@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 /* Benchmark AI: wyścigi samych kierowców AI bez grafiki, liczy uderzenia w bandy, kontakty, obroty, resety, DNF i czasy okrążeń.
-   Użycie: node tools/aibench.js [--tracks a,b] [--diff 1,5,10] [--seeds 3] [--laps N] [--damage simple|full|none] [--tires normal|off|fast] [--solo] [--json] [--verbose] */
+   Użycie: node tools/aibench.js [--tracks a,b] [--diff 1,5,10] [--seeds 3] [--laps N] [--damage simple|full|none] [--tires normal|off|fast] [--solo] [--json] [--verbose]
+           [--jobs N] (wyścigi równolegle w wątkach, domyślnie liczba rdzeni) [--save plik.json] [--base plik.json] (porównanie z zapisanym wynikiem) */
 'use strict';
-const path = require('path');
+const path = require('path'), os = require('os'), fs = require('fs');
+const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 const Sim = require(path.join(__dirname, '..', 'sim.js'));
 
 const args = process.argv.slice(2), arg = (k, d) => { const i = args.indexOf('--' + k); return i < 0 ? d : args[i + 1]; }, flag = k => args.includes('--' + k);
@@ -77,19 +79,66 @@ function runRace(track, diff, seed) {
   return st;
 }
 
-const all = [];
-for (const track of TRACKS) for (const diff of DIFFS) for (let seed = 1; seed <= SEEDS; seed++) {
-  const t0 = Date.now();
-  const st = runRace(track, diff, seed);
-  st.wall = Date.now() - t0;
-  all.push(st);
-  if (!JSONOUT) {
-    console.log(`${track.padEnd(13)} d${String(diff).padEnd(3)} s${seed}  scrapes ${String(st.scrapes).padStart(3)} ${st.scrapeT.toFixed(1).padStart(4)}s  walls ${String(st.wallHits).padStart(3)} (hard ${String(st.wallHard).padStart(2)}, max ${st.wallMaxV.toFixed(1).padStart(4)})  contacts ${String(st.contacts).padStart(3)} (hard ${String(st.contactsHard).padStart(2)})  spins ${String(st.spins).padStart(2)}  resets ${String(st.resets).padStart(2)}  dnf ${st.dnf}  grass ${st.grassT.toFixed(1).padStart(5)}s  best ${st.bestLap.toFixed(2)} med ${st.medLap.toFixed(2)} line ${st.lineTime.toFixed(2)}  pits ${st.pitStops}  [${st.wall}ms]`);
+// wątek roboczy: jeden wyścig
+if (!isMainThread) {
+  const st = runRace(workerData.track, workerData.diff, workerData.seed);
+  if (!isFinite(st.bestLap)) st.bestLap = null;
+  parentPort.postMessage(st);
+  return;
+}
+
+const JOBS = Math.max(1, +arg('jobs', os.cpus().length));
+const KEYS = ['scrapeT', 'wallHits', 'wallHard', 'contacts', 'contactsHard', 'spins', 'resets', 'dnf', 'grassT'];
+const fmtLine = st => `${st.track.padEnd(13)} d${String(st.diff).padEnd(3)} s${st.seed}  scrapes ${String(st.scrapes).padStart(5)} ${st.scrapeT.toFixed(1).padStart(5)}s  walls ${String(st.wallHits).padStart(3)} (hard ${String(st.wallHard).padStart(2)}, max ${st.wallMaxV.toFixed(1).padStart(4)})  contacts ${String(st.contacts).padStart(3)} (hard ${String(st.contactsHard).padStart(2)})  spins ${String(st.spins).padStart(2)}  resets ${String(st.resets).padStart(2)}  dnf ${st.dnf}  grass ${st.grassT.toFixed(1).padStart(5)}s  best ${st.bestLap.toFixed(2)} med ${st.medLap.toFixed(2)} line ${st.lineTime.toFixed(2)}  pits ${st.pitStops}  [${st.wall}ms]`;
+
+// podsumowanie tor × poziom: sumy incydentów z seedów, średnia strata najlepszego / medianowego okrążenia do linii idealnej [%]
+function summarize(all) {
+  const g = new Map();
+  for (const st of all) {
+    const key = st.track + ' d' + st.diff;
+    if (!g.has(key)) g.set(key, { n: 0, bestGap: 0, medGap: 0, ...Object.fromEntries(KEYS.map(k => [k, 0])) });
+    const r = g.get(key); r.n++;
+    for (const k of KEYS) r[k] += st[k];
+    r.bestGap += (st.bestLap / st.lineTime - 1) * 100; r.medGap += (st.medLap / st.lineTime - 1) * 100;
+  }
+  for (const r of g.values()) { r.bestGap /= r.n; r.medGap /= r.n; }
+  return g;
+}
+function printSummary(all, base) {
+  const S = summarize(all), B = base ? summarize(base) : null;
+  const delta = (v, b, dig) => ` (${v - b >= 0 ? '+' : ''}${(v - b).toFixed(dig)})`;
+  console.log('\nSUMMARY  (sumy z seedów; best% / med% = strata do linii idealnej)');
+  for (const [key, r] of S) {
+    const b = B && B.get(key);
+    const col = (k, dig = 0, w = 4) => r[k].toFixed(dig).padStart(w) + (b ? delta(r[k], b[k], dig).padEnd(9) : '');
+    console.log(`${key.padEnd(17)} scrapeT ${col('scrapeT', 1, 6)} walls ${col('wallHits')} hard ${col('wallHard')} contacts ${col('contacts')} hard ${col('contactsHard')} spins ${col('spins')} resets ${col('resets')} dnf ${col('dnf')} grass ${col('grassT', 1, 5)} best% ${col('bestGap', 2, 5)} med% ${col('medGap', 2, 5)}`);
+  }
+  const tot = a => Object.fromEntries(KEYS.map(k => [k, a.reduce((s, x) => s + x[k], 0)]));
+  const T = tot(all), TB = base && tot(base), dig = k => k.endsWith('T') ? 1 : 0;
+  console.log('\nTOTAL  ' + KEYS.map(k => `${k} ${T[k].toFixed(dig(k))}${TB ? delta(T[k], TB[k], dig(k)) : ''}`).join('  '));
+}
+
+(async () => {
+  const jobs = [];
+  for (const track of TRACKS) for (const diff of DIFFS) for (let seed = 1; seed <= SEEDS; seed++) jobs.push({ track, diff, seed });
+  const all = new Array(jobs.length), t0 = Date.now();
+  let next = 0;
+  const runOne = () => new Promise((res, rej) => {
+    const i = next++; if (i >= jobs.length) return res(false);
+    const t1 = Date.now(), w = new Worker(__filename, { argv: process.argv.slice(2), workerData: jobs[i] });
+    w.once('message', st => { st.wall = Date.now() - t1; if (st.bestLap == null) st.bestLap = Infinity; all[i] = st; });
+    w.once('error', rej);
+    w.once('exit', () => res(true));
+  });
+  await Promise.all(Array.from({ length: Math.min(JOBS, jobs.length) }, async () => { while (await runOne()); }));
+  if (JSONOUT) return console.log(JSON.stringify(all, null, 1));
+  for (const st of all) {
+    console.log(fmtLine(st));
     if (VERBOSE) { for (const h of st.hitsAt) console.log('    hit', JSON.stringify(h)); for (const h of st.scrapesAt) console.log('    scrape', JSON.stringify(h)); }
   }
-}
-if (JSONOUT) console.log(JSON.stringify(all, null, 1));
-else {
-  const sum = k => all.reduce((a, s) => a + s[k], 0);
-  console.log(`\nTOTAL  scrapeT ${sum('scrapeT').toFixed(1)}s  walls ${sum('wallHits')} (hard ${sum('wallHard')})  contacts ${sum('contacts')} (hard ${sum('contactsHard')})  spins ${sum('spins')}  resets ${sum('resets')}  dnf ${sum('dnf')}  grass ${sum('grassT').toFixed(1)}s`);
-}
+  const basePath = arg('base');
+  printSummary(all, basePath ? JSON.parse(fs.readFileSync(basePath, 'utf8')) : null);
+  const savePath = arg('save');
+  if (savePath) fs.writeFileSync(savePath, JSON.stringify(all.map(({ hitsAt, scrapesAt, ...s }) => s)));
+  console.log(`\n${jobs.length} wyścigów, ${JOBS} wątków, ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+})();
