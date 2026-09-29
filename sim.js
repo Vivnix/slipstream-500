@@ -772,7 +772,11 @@
       const dmax = clamp(CAR.wb * k + 0.011 + 32 / Math.max(1, V * V) + tight * 0.0012 * V * V * k, 0.02, 0.42);
       let dl = c.steer * dmax, th = c.throttle;
       if ((car.assists != null ? car.assists : this.opt.assists) && V > 8) {
-        const rExp = car.u * Math.tan(dl) / (CAR.wb * (1 + 0.0004 * car.u * car.u));
+        // oczekiwane odchylenie z kierownicy + to, co dokłada przechyłka (grawitacja w dół skarpy skręca auto bez udziału opon);
+        // bez tego asysta brała długi szybki łuk na 31° za nadsterowność i ścinała skręt
+        const tr = this.track, fr = tr.frame(car.s), bk = tr.surface(car.s, car.d) === 0 ? tr.bank(car.s, car.d) : 0;
+        const gy = (fr.nx * Math.sin(car.psi) - fr.ny * Math.cos(car.psi)) * G * Math.sin(bk) * Math.cos(bk);
+        const rExp = (car.u * Math.tan(dl) + 0.0004 * CAR.wb * car.u * gy) / (CAR.wb * (1 + 0.0004 * car.u * car.u));
         const over = car.r - rExp;
         if (Math.abs(over) > 0.04) {
           const fix = -0.35 * (over - Math.sign(over) * 0.04);
