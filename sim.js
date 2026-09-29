@@ -1029,8 +1029,6 @@
   // ───────────────────────────── KIEROWCA AI ─────────────────────────────
   // Umiejętność 1–10 zmienia wyłącznie to, JAK kierowca wykorzystuje identyczny samochód:
   // ile zapasu przyczepności zostawia, gdzie hamuje, jak dobiera linię, jak czyta tunel i ruch.
-  // WIP: przełączniki eksperymentów AI (env AIX nadpisuje); domyślnie hp = bez ataku w nawrót >110°, antl = zapas na „luźny” tył od auta tuż za mną, wf = bez odcięcia gazu przy zjeździe z celu przy małej prędkości
-  const AIX = (typeof process !== 'undefined' && process.env && process.env.AIX) || 'hp,antl,wf';
   class Driver {
     constructor(car, race, skill) {
       this.car = car; this.race = race; this.skill = skill;
@@ -1050,7 +1048,7 @@
       const best = race.track.id === 'speedway' ? 'bottom' : race.bestLine;
       this.lineName = Math.random() < 0.3 + 0.7 * k ? best : names[Math.floor(Math.random() * names.length)];
       // tor drogowy: linia „mid” (60% szerokości) jest o 6–10% wolniejsza — nie do wyprzedzenia korek; słabszy jedzie najwyżej „wide”
-      if (!AIX.includes('nomid') && race.track.kind === 'road' && this.lineName === 'mid') this.lineName = 'wide';
+      if (race.track.kind === 'road' && this.lineName === 'mid') this.lineName = 'wide';
       this.pitAt = 0.85 + Math.random() * 0.4;        // jak ostrożnie zespół liczy stratę w boksie (rozrzut strategii)
       this.pitBias = Math.random() * 2 - 1;
       this.reset();
@@ -1129,7 +1127,7 @@
         // zewnętrznej odpuszcza, choćby było trochę z przodu, a to po wewnętrznej się nie chowa. Strefa i strona z miejsca auta z tyłu
         // pary — obaj liczą to samo, więc zawsze ustępuje dokładnie jeden (i nigdy ten, któremu rywal już ustępuje).
         const z = tr.kind === 'road' ? roadZone(this.race, ds > 0 ? c.s : o.s) : 0, ins = Math.sign(dd) * z, inner = CAR.length * 0.55;
-        if (tr.kind === 'road' && (AIX.includes('noprio') ? ds > 0.5 : ins > 0 ? ds > -inner : ins < 0 ? ds > inner : ds > 0.5) &&  o.status === 'racing' && o.speed > c.speed * 0.75 && Math.abs(angDiff(o.psi, tr.frame(o.s).th)) < 0.35 && !(o.driver && o.driver.yieldTo === c) && !(this.commit && o === this.passCar) && (!yt || o.speed < yt.speed)) yt = o;
+        if (tr.kind === 'road' && (ins > 0 ? ds > -inner : ins < 0 ? ds > inner : ds > 0.5) && o.status === 'racing' && o.speed > c.speed * 0.75 && Math.abs(angDiff(o.psi, tr.frame(o.s).th)) < 0.35 && !(o.driver && o.driver.yieldTo === c) && !(this.commit && o === this.passCar) && (!yt || o.speed < yt.speed)) yt = o;
       }
       // auto z dołu dociska mnie do bandy — odpuść i schowaj się za nim, zamiast trzeć o ścianę
       this.wallSq = pack && lo > hi0 - 0.3;
@@ -1170,14 +1168,14 @@
         const gap = aheadDs - CAR.length, closing = c.speed - ahead.speed;
         // tor drogowy: auto hamujące do ciasnego łuku jedzie o połowę wolniej, a nie stoi — wrak to dopiero auto obrócone / prawie stojące
         const wrecked = ahead.status === 'dnf' || (tr.kind === 'road' ? ahead.speed < 8 || Math.abs(angDiff(ahead.psi, tr.frame(ahead.s).th)) > 0.6 : ahead.speed < c.speed * 0.6);
-        // tor drogowy: wyprzedzanie zdrowego rywala to osobny manewr (roadAttack) — niżej tylko objazd wraku
-        if (tr.kind === 'road' && !wrecked && !AIX.includes('noatk')) { if (this.roadAttack(ahead, aheadDs)) return; }
+        // tor drogowy: najpierw atak na dohamowaniu (roadAttack); gdy się nie da — niżej zwykłe wyprzedzanie na prostej (z tunelu) i objazd wraku
+        if (tr.kind === 'road' && !wrecked) { if (this.roadAttack(ahead, aheadDs)) return; }
         const trig = wrecked ? 90 : clamp(closing * (1.2 + 1.6 * k) + 3 + (1 - k) * (Math.random() * 10 - 3), 2, 45);
         const drafting = tr.id !== 'short' && gap < 25 && c.draft > 0.12;
         const needRun = tr.id === 'speedway' ? 1.2 - 0.5 * k : 0.4 - 0.3 * k;
-        let wantPass = gap < trig && (closing > needRun || wrecked) && !(this.cool > 0) && (wrecked || tr.kind !== 'road' || AIX.includes('noatk') || AIX.includes('old'));
+        let wantPass = gap < trig && (closing > needRun || wrecked) && !(this.cool > 0);
         // slingshot: dobry kierowca wychodzi z tunelu z nadwyżką prędkości tuż za rywalem
-        if (!wantPass && drafting && k > 0.35 && gap < 4 + 6 * k && closing > 0.6 - 0.3 * k && !(this.cool > 0) && (tr.kind !== 'road' || AIX.includes('noatk') || AIX.includes('old')) && Math.random() < k * 0.25) wantPass = true;
+        if (!wantPass && drafting && k > 0.35 && gap < 4 + 6 * k && closing > 0.6 - 0.3 * k && !(this.cool > 0) && Math.random() < k * 0.25) wantPass = true;
         // manewr ustawia się przed zakrętem — w łuku tylko omijanie wraku
         if (wantPass && tr.inTurn(c.s) && !wrecked) wantPass = false;
         // tor drogowy: atak tylko na prostej, na której zdąży się skończyć — nie w strefie hamowania (tam pas obok linii jest wolniejszy)
@@ -1258,8 +1256,8 @@
       const c = this.car, race = this.race, tr = race.track, k = this.k, u = c.u, sI = roadSide(race, c.s);
       // nie w wolnym łuku (szybki łuk, np. bankowanie owalu Daytony, się nadaje)
       if (this.cool > 0 || a.status !== 'racing' || a.pit || !sI || slowTurn(race, c.s)) return false;
-      if (AIX.includes('xr1') && c.prog < tr.len) return false;
-      if (AIX.includes('hp') && turnAng(race, c.s) > 1.9) return false;
+      // ani przed nawrotem (łuk > ~110°) — tam atak po wewnętrznej kończy się wjazdem w rywala na wyjściu
+      if (turnAng(race, c.s) > 1.9) return false;
       const gap = aDs - CAR.length, closing = c.speed - a.speed, v5 = Math.max(u, 5);
       // powód: szybszy (dojeżdża) albo od dłuższej chwili trzymany za jego plecami (wolniejszy w łukach)
       const held = this.heldT > 2.5 - 1.5 * k;
@@ -1321,13 +1319,6 @@
     }
     // tor drogowy: droga do najbliższego wolnego łuku (szybkie łuki bankowania się nie liczą)
     turnDist(maxX) { const c = this.car; for (let x = 0; x <= maxX; x += 8) if (slowTurn(this.race, c.s + x)) return x; return maxX + 8; }
-    // droga do wyjścia z najbliższego łuku (w łuku — z bieżącego)
-    exitDist(maxX) {
-      const tr = this.race.track, s = this.car.s; let x = 0;
-      while (x <= maxX && !tr.inTurn(s + x)) x += 4;
-      while (x <= maxX && tr.inTurn(s + x)) x += 4;
-      return Math.min(x, maxX);
-    }
     // droga do miejsca, w którym linia każe wyraźnie hamować (jak brakeSoon)
     brakeDist(maxX) {
       const c = this.car, u = c.u;
@@ -1392,7 +1383,7 @@
       const c = this.car, race = this.race, tr = race.track, k = this.k;
       const u = c.u;
       let vt = 999;
-      const gs = this.gripScale(tr.kind === 'road' && (AIX.includes('ant') || AIX.includes('l1c')));
+      const gs = this.gripScale(tr.kind === 'road');
       const horizon = Math.max(60, u * u / (2 * this.decel) + 40);
       // tor drogowy w ruchu (ktoś obok albo tuż przed nami): hamuj z wyprzedzeniem ~0,35 s — samotnie wjazd w łuk z lekkim nadmiarem
       // prędkości ratuje hamowanie w łuku, ale w stawce nie zostaje wtedy zapasu na sąsiada, dotknięcie czy brudne powietrze
@@ -1443,16 +1434,16 @@
       // tor drogowy: w strefie hamowania i w łuku auto, które jest z tyłu „na zakładkę”, odpuszcza i chowa się za rywala
       const y = this.yieldTo;
       if (y && (vt < u - 0.5 || tr.inTurn(c.s) || tr.inTurn(c.s + u * 1.5))) {
-        if (AIX.includes('gy')) { const need = CAR.length + 1 - tr.ds(c.s, y.s), T = clamp(this.exitDist(u * 4) / Math.max(u, 5), 0.6, 3); vt = Math.min(vt, y.speed - clamp(need / T, 0, 3)); }
-        else vt = Math.min(vt, y.speed - 3);
+        vt = Math.min(vt, y.speed - 3);
       }
       let [th, br] = this.pedals(vt);
       // auto wypycha na zewnątrz ponad zamierzoną linię (push) — odpuść gaz, zwłaszcza gdy ktoś jedzie wyżej
       const push = c.d - this.dS;
       if (tr.kind === 'road') {
         // ucieka na zewnątrz łuku albo przód jest za szczytem przyczepności (podsterowność) — odpuść gaz
+        // (nie przy małej prędkości, np. zjeżdżając z celu po wyjściu z ciasnego łuku — tam odcięcie gazu tylko zatrzymuje auto w stawce)
         const kk = tr.kappa(c.s, c.d), wide = (c.d - this.dS) * Math.sign(kk);
-        if (kk && wide > 0.6 && !(AIX.includes('wf') && u < 0.75 * this.vlim(c.s) * this.use)) th *= clamp(1 - (wide - 0.6) * 0.8, 0, 1);
+        if (kk && wide > 0.6 && u >= 0.75 * this.vlim(c.s) * this.use) th *= clamp(1 - (wide - 0.6) * 0.8, 0, 1);
         if (Math.abs(c.slipF) > PEAK_SLIP * 1.15) th *= 0.35;
       } else if (push > 0.25 && tr.inTurn(c.s) && this.hiCar && this.hi - c.d < 1.5) {
         th *= clamp(1 - (push - 0.25) * (1.5 + 3 * k), 0, 1);
@@ -1512,21 +1503,17 @@
     }
     // prędkość, z której zdążę wyhamować przed każdym łukiem pasa d
     // mnożnik prędkości w łuku: zużycie opon, uszkodzenia, brudne powietrze — dobry kierowca to czuje i odpuszcza
-    gripScale(ant) {
+    // road = tor drogowy: auto tuż za mną (do 10 m) — w łuku tył może zrobić się luźny od jego zawirowań, a on nie zdąży zareagować,
+    // gdy stracę przyczepność: licz zapas jak przy aero-loose (tym większy, im bliżej jest)
+    gripScale(road) {
       const c = this.car, tr = this.race.track, grip = Math.min(c.fx.gripF, c.fx.gripR);
-      let dirty = c.dirty, loose = c.aeroLoose;
-      if (ant) {
-        const inT = tr.inTurn(c.s);
-        if (!inT && AIX.includes('antd')) dirty /= 0.4;
-        if (AIX.includes('l1c')) loose = Math.max(loose, +(process.env.AIXL1 || 0.2) * clamp((+(process.env.AIXP || 700) - c.prog) / 150, 0, 1));
-        if (AIX.includes('antl') && !(AIX.includes('xa1') && c.prog < tr.len)) for (const o of this.race.cars) {
-          if (o === c || o.status === 'out') continue;
-          const ds = tr.ds(c.s, o.s);
-          if (AIX.includes('ants') && ds > CAR.length && ds < CAR.length + 10 && Math.abs(o.d - c.d) < 5) loose = Math.max(loose, 0.32 * Math.exp((ds - CAR.length) / -3.5));
-          if (ds < -CAR.length && ds > -CAR.length - 10 && Math.abs(o.d - c.d) < 5) loose = Math.max(loose, 0.32 * Math.exp((-ds - CAR.length) / -3.5) * (AIX.includes('al2') ? Math.exp(-(((o.d - c.d) / 2.5) ** 2)) : 1));
-        }
+      let loose = c.aeroLoose;
+      if (road) for (const o of this.race.cars) {
+        if (o === c || o.status === 'out') continue;
+        const ds = tr.ds(c.s, o.s);
+        if (ds < -CAR.length && ds > -CAR.length - 10 && Math.abs(o.d - c.d) < 5) loose = Math.max(loose, 0.32 * Math.exp((-ds - CAR.length) / -3.5));
       }
-      let aeroLoss = (0.25 + 0.2 * this.k) * Math.max(dirty, loose);
+      let aeroLoss = (0.25 + 0.2 * this.k) * Math.max(c.dirty, loose);
       // owal: na prostej brudne powietrze działa w 40%, aero-loose w 30% — przed łukiem licz już z pełnym, inaczej kierowca hamuje dopiero w łuku i wypycha go na bandę
       if (tr.kind === 'oval' && tr.id !== 'speedway') {
         const ant = !tr.inTurn(c.s) && tr.inTurn(c.s + c.u * 2);
