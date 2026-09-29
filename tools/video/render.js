@@ -4,7 +4,7 @@
    3) montaż (lista ujęć poniżej), 4) nagrywanie klatka po klatce w Chrome bez okna (capture.js + director.html, sprawdzenie zgodności z Node),
    5) muzyka i efekty (sound.js) + dźwięk gry renderowany offline, 6) ffmpeg: trailer.mp4, trailer-bez-muzyki.mp4, [trailer-pionowy.mp4], kadry PNG.
    Użycie: node tools/video/render.js [--sim sim.js] [--old-rev e3dca2c | --old stary-sim.js] [--out katalog] [--work katalog-roboczy]
-           [--vertical] (także wersja 1080×1920) [--preview] (960×540, szybki podgląd) [--only id,id] (tylko wybrane ujęcia, bez montażu)
+           [--vertical] (także wersja 1080×1920) [--preview] (960×540, z --vertical także 540×960 — szybki podgląd) [--only id,id] (tylko wybrane ujęcia, bez montażu)
            [--bench-seeds 5] [--scene-seeds 8] [--force] (bez cache: benchmark, sceny i ujęcia liczone od nowa)
    Wymaga: Node 24+, Chrome (albo zmienna CHROME), ffmpeg w PATH, internet (three.js i czcionki z CDN). */
 'use strict';
@@ -134,14 +134,15 @@ function edl(S, B) {
       { key: 'spins', label: 'obrotów', where: 'tory drogowe', f: r => r.track === 'indy' || r.track === 'daytona' },
       { key: 'grassT', label: 'jazdy po trawie', unit: ' s', where: 'tory drogowe', f: r => r.track === 'indy' || r.track === 'daytona', min: 20 }]),
   };
-  const statOv = (s, from, to) => s ? [{ type: 'stat', value: s.value, unit: '%', label: s.label, detail: s.detail, from, to, count: 45 }] : [];
+  // x: na owalach lewa strona kadru to trawa w środku toru — liczba nie zasłania stawki; przy porównaniu nad widokiem „po”
+  const statOv = (s, from, to, x = 0.27) => s ? [{ type: 'stat', value: s.value, unit: '%', label: s.label, detail: s.detail, from, to, count: 45, x }] : [];
   const PRZED = { type: 'tag', kind: 'before', text: 'Przed', sub: 'stare AI', from: 0 }, PO = { type: 'tag', kind: 'after', text: 'Po', sub: 'nowe AI', from: 0 };
 
   // 1. zimne otwarcie: kraksa starego AI, zwolnienie 4,5× wokół pierwszego uderzenia
   const c = S.cold, pre = 2.3, slowA = 125, slowB = 140, slowC = 330, slowD = 350;
-  // statyw jak kamera TV (na zewnątrz ściany, wysoko), ale stały przez całe ujęcie — kamera TV gry przeskakiwała na starcie
+  // statyw w środku owalu, wysoko, stały przez całe ujęcie (kamera TV gry na starcie patrzyła w siatkę i przeskakiwała)
   const cold = shot('01-otwarcie', 14, {
-    views: [view(c, { type: 'tripod', ahead: 250, out: 26, h: 16, size: 12 }, { t0: +(c.t - pre).toFixed(2), speed: [[slowA, 1], [slowB, 0.22], [slowC, 0.22], [slowD, 1]] })],
+    views: [view(c, { type: 'tripod', ahead: 230, d: -45, h: 14, size: 14 }, { t0: +(c.t - pre).toFixed(2), speed: [[slowA, 1], [slowB, 0.22], [slowC, 0.22], [slowD, 1]] })],
     ov: [{ type: 'black', from: 0, to: 30, fadeIn: 30 }, { type: 'bars', from: 0, h: 0.1 },
       { type: 'caption', text: 'Tak było…', small: `stare AI · ${where(c)}`, from: 40, to: 390, in: 30, out: 20 }, { type: 'flash', from: 414, len: 8, peak: 0.9 }],
   });
@@ -161,7 +162,7 @@ function edl(S, B) {
   shot('06-owal-po', 8, { views: [view(S.scNew, heliOval)], ov: [PO, ...statOv(stats.sc, 40, 238)] });
   const heliRoad = { type: 'heli', back: 22, up: 11, lead: 16 };
   shot('07-drogowe-porownanie', 12, { layout: 'split', views: [view(S.rdOld, heliRoad, { t0: +(S.rdOld.t - 2).toFixed(2) }), view(S.rdNew, heliRoad, { t0: +(S.rdNew.t - 2).toFixed(2) })],
-    ov: [Object.assign({ view: 0 }, PRZED), Object.assign({ view: 1 }, PO), { type: 'chapter', num: '03', title: 'Tory drogowe', sub: 'Ten sam start, ten sam zakręt', from: 8, to: 170 }, ...statOv(stats.rd, 180, 358)] });
+    ov: [Object.assign({ view: 0 }, PRZED), Object.assign({ view: 1 }, PO), { type: 'chapter', num: '03', title: 'Tory drogowe', sub: 'Ten sam start, ten sam zakręt', from: 8, to: 170 }, ...statOv(stats.rd, 180, 358, 0.75)] });
   // 4. montaż nowego AI
   const chip = (text, beats) => [{ type: 'chip', text, from: 4, to: beats * BEAT - 4, in: 8, out: 6 }];
   const M = [
@@ -245,7 +246,8 @@ function assemble(caps, name, outName, total) {
   const { shots, stats, rows } = edl(S, B);
   fs.writeFileSync(path.join(WORK, 'montaz.json'), JSON.stringify({ scenes: S, stats, rows, shots }, null, 1));
   log('statystyki:', JSON.stringify(stats), '\ntablica:', rows.map(r => `${r.label} ${r.old}→${r.new}`).join(', '));
-  const formats = PREVIEW ? [['podglad', 960, 540, 'trailer-podglad']] : [['poziomo', 1920, 1080, 'trailer'], ...(flag('vertical') ? [['pionowo', 1080, 1920, 'trailer-pionowy']] : [])];
+  const formats = PREVIEW ? [['podglad', 960, 540, 'trailer-podglad'], ...(flag('vertical') ? [['podglad-pionowo', 540, 960, 'trailer-podglad-pionowy']] : [])]
+    : [['poziomo', 1920, 1080, 'trailer'], ...(flag('vertical') ? [['pionowo', 1080, 1920, 'trailer-pionowy']] : [])];
   for (const [name, w, h, outName] of formats) {
     const list = ONLY ? shots.filter(s => ONLY.some(o => s.id.startsWith(o))) : shots;
     log(`nagrywanie ${name} ${w}×${h}: ${list.length} ujęć, ${list.reduce((a, s) => a + s.frames, 0)} klatek…`);
@@ -255,7 +257,7 @@ function assemble(caps, name, outName, total) {
     if (ONLY) { log('ujęcia:\n' + caps.map(c => '  ' + c.file).join('\n')); continue; }
     const total = soundtrack(shots, caps, name);
     assemble(caps, name, outName, total);
-    if (name !== 'pionowo') {
+    if (!/pionowo/.test(name)) {
       // kadry: środek wybranych ujęć
       let at = 0; const mid = {};
       for (const s of shots) { mid[s.id] = at + s.frames / FPS * (/otwarcie/.test(s.id) ? 0.45 : /liczby/.test(s.id) ? 0.9 : 0.6); at += s.frames / FPS; }

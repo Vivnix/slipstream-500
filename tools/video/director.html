@@ -16,7 +16,7 @@
   .view { position: absolute; inset: 0; overflow: hidden; background: #000; }
   .view iframe { border: 0; width: 100%; height: 100%; display: block; }
   .split .view.v0 { right: 50%; } .split .view.v1 { left: 50%; }
-  .portrait .split .view.v0 { right: 0; bottom: 50%; } .portrait .split .view.v1 { left: 0; top: 50%; }
+  .portrait.split .view.v0 { right: 0; bottom: 50%; } .portrait.split .view.v1 { left: 0; top: 50%; }   /* #stage ma obie klasy naraz */
   .divider { position: absolute; left: 50%; top: -5%; bottom: -5%; width: calc(0.55 * var(--u)); margin-left: calc(-0.275 * var(--u)); background: var(--caution); transform: skewX(-6deg); box-shadow: 0 0 calc(2 * var(--u)) rgba(0,0,0,.6); display: none; }
   .split .divider { display: block; }
   .portrait .divider { left: -5%; right: -5%; top: 50%; bottom: auto; width: auto; height: calc(0.55 * var(--u)); margin: calc(-0.275 * var(--u)) 0 0; transform: skewY(-4deg); }
@@ -50,8 +50,8 @@
   /* wielka liczba */
   .stat { left: 50%; bottom: calc(8 * var(--u)); transform: translateX(-50%); text-align: center; display: flex; flex-direction: column; align-items: center; }
   .stat .big { font: 800 calc(13 * var(--u))/.82 var(--display); color: var(--caution); letter-spacing: .01em; transform: skewX(-9deg); text-shadow: 0 calc(.5 * var(--u)) calc(3 * var(--u)) rgba(0,0,0,.7); font-variant-numeric: tabular-nums; }
-  .stat .lbl { margin-top: calc(1.2 * var(--u)); font: 800 calc(3.3 * var(--u))/1 var(--display); text-transform: uppercase; letter-spacing: .04em; background: var(--flag-white); color: #111; padding: calc(.6 * var(--u)) calc(1.8 * var(--u)) calc(.4 * var(--u)); transform: skewX(-9deg); }
-  .stat .det { margin-top: calc(1 * var(--u)); font: 600 calc(1.7 * var(--u))/1.2 var(--body); letter-spacing: .05em; background: rgba(10,11,14,.8); padding: calc(.5 * var(--u)) calc(1.2 * var(--u)); color: #d6d2c7; }
+  .stat .lbl { margin-top: calc(1.2 * var(--u)); font: 800 calc(3.3 * var(--u))/1 var(--display); text-transform: uppercase; letter-spacing: .04em; background: var(--flag-white); color: #111; padding: calc(.6 * var(--u)) calc(1.8 * var(--u)) calc(.4 * var(--u)); transform: skewX(-9deg); white-space: nowrap; }
+  .stat .det { margin-top: calc(1 * var(--u)); font: 600 calc(1.7 * var(--u))/1.2 var(--body); letter-spacing: .05em; background: rgba(10,11,14,.8); padding: calc(.5 * var(--u)) calc(1.2 * var(--u)); color: #d6d2c7; white-space: nowrap; }
 
   /* napis filmowy */
   .caption { left: calc(6 * var(--u)); top: calc(10% + 4 * var(--u)); font: 600 calc(4.4 * var(--u))/1 var(--display); letter-spacing: .22em; text-transform: uppercase; color: #fff; text-shadow: 0 0 calc(2 * var(--u)) rgba(0,0,0,.8); }
@@ -73,10 +73,12 @@
   .card .nm { font: 700 calc(2.7 * var(--u))/1 var(--display); text-transform: uppercase; letter-spacing: .05em; }
   .card .bars2 { display: flex; flex-direction: column; gap: calc(.45 * var(--u)); }
   .card .b { height: calc(1.9 * var(--u)); transform: skewX(-9deg); transform-origin: left; display: flex; align-items: center; font: 700 calc(1.5 * var(--u))/1 var(--display); padding-left: calc(.8 * var(--u)); white-space: nowrap; letter-spacing: .05em; }
-  .card .b.o { background: #7d2a2d; color: #ffd9da; } .card .b.n { background: var(--green); color: #07140c; min-width: calc(.6 * var(--u)); }
+  .card .b.o { background: #7d2a2d; color: #ffd9da; } .card .b.n { background: var(--green); color: #07140c; min-width: calc(.6 * var(--u)); position: relative; }
+  .card .b i { font-style: normal; } .card .b.n.out i { position: absolute; left: 100%; margin-left: calc(.8 * var(--u)); color: var(--green); }   /* krótki pasek: wartość obok, nie w środku */
   .card .pc { font: 800 calc(5.4 * var(--u))/1 var(--display); color: var(--caution); text-align: right; transform: skewX(-9deg); font-variant-numeric: tabular-nums; }
   .card .foot { margin-top: calc(1.5 * var(--u)); font: 500 calc(1.5 * var(--u))/1.3 var(--body); color: var(--muted); letter-spacing: .04em; }
   .portrait .card { padding: 0 calc(5 * var(--u)); }
+  .portrait #ov > :not(.title) { --u: 1.3vw; }   /* w pionie kadr jest wąski: napisy (poza tytułem, który i tak wypełnia szerokość) większe */
   .portrait .card .r { grid-template-columns: 1fr calc(15 * var(--u)); } .portrait .card .bars2 { grid-column: 1 / -1; grid-row: 2; }
 
   /* zakończenie */
@@ -159,14 +161,14 @@
     let pos, look, fov = cam.fov || 50;
     const car = [c.x, tr.height(c.s, c.d) + 0.8, -c.y];
     if (cam.type === 'heli') {
-      pos = W(tr, st.s - (cam.back || 34), st.d * 0.4 + (cam.side || 0), cam.up || 13);
-      look = W(tr, st.s + (cam.lead || 18), st.d * 0.7, 0.5);
+      // w pionie kadr jest wąski — kamera bliżej osi auta, żeby nie uciekało za krawędź
+      const P = portrait();
+      pos = W(tr, st.s - (cam.back || 34), st.d * (P ? 0.8 : 0.4) + (cam.side || 0), cam.up || 13);
+      look = W(tr, st.s + (cam.lead || 18), st.d * (P ? 0.95 : 0.7), 0.5);
     } else if (cam.type === 'track') {          // nisko, z boku, jak samochód z kamerą
       pos = W(tr, st.s - (cam.back || 8), st.d + (cam.side || 6), cam.h || 1.3);
       look = W(tr, st.s + (cam.lead || 10), st.d, 0.9);
     } else if (cam.type === 'tripod') {         // statyw przy torze: stoi, obraca się za autem i przybliża
-      // out: odległość za zewnętrzną ścianą (wysokość liczona od krawędzi toru, nie z przedłużonego nachylenia)
-      if (!st.fixed && cam.out != null) { const s = c.s + (cam.ahead || 90), p = tr.toWorld(s, (tr.outerWall || tr.halfW) + cam.out); st.fixed = [p.x, tr.height(s, tr.halfW) + (cam.h || 4), -p.y]; }
       if (!st.fixed) st.fixed = W(tr, c.s + (cam.ahead || 90), cam.d != null ? cam.d : -(tr.halfW + 6), cam.h || 4);
       pos = st.fixed; look = car;
       const dist = Math.hypot(pos[0] - car[0], pos[1] - car[1], pos[2] - car[2]);
@@ -196,7 +198,7 @@
     else if (o.type === 'stat') el.innerHTML = `<div class="big"></div><div class="lbl">${esc(o.label)}</div>${o.detail ? `<div class="det">${esc(o.detail)}</div>` : ''}`;
     else if (o.type === 'caption') el.innerHTML = `${esc(o.text)}${o.small ? `<small>${esc(o.small)}</small>` : ''}`;
     else if (o.type === 'title') el.innerHTML = `<h1>Slipstream <span>500</span></h1><div class="checker"></div><h2>${esc(o.sub || 'Nowe AI')}</h2>${o.line ? `<p>${esc(o.line)}</p>` : ''}`;
-    else if (o.type === 'card') el.innerHTML = `<h3>${o.title}</h3>` + o.rows.map(r => `<div class="r"><div class="nm">${esc(r.label)}</div><div class="bars2"><div class="b o"></div><div class="b n"></div></div><div class="pc"></div></div>`).join('') + (o.foot ? `<div class="foot">${esc(o.foot)}</div>` : '');
+    else if (o.type === 'card') el.innerHTML = `<h3>${o.title}</h3>` + o.rows.map(r => `<div class="r"><div class="nm">${esc(r.label)}</div><div class="bars2"><div class="b o"></div><div class="b n"><i></i></div></div><div class="pc"></div></div>`).join('') + (o.foot ? `<div class="foot">${esc(o.foot)}</div>` : '');
     else if (o.type === 'outro') el.innerHTML = `<div class="name">Slipstream <span>500</span></div><div class="cta">${esc(o.cta || 'Zagraj teraz')}</div>${o.sub ? `<div class="sub">${esc(o.sub)}</div>` : ''}`;
     else if (o.type === 'bars') el.style.setProperty('--bh', (o.h || 0.1) * 100 + '%');
     $('#ov').appendChild(el);
@@ -234,7 +236,7 @@
       case 'stat': {
         const k = ease((i - o.from - 4) / (o.count || 50)), v = lerp(o.countFrom == null ? 0 : o.countFrom, o.value, k);
         el.querySelector('.big').textContent = (o.prefix || '') + numPL(v, o.dig || 0) + (o.unit || '');
-        if (views.length > 1 && !portrait()) el.style.left = '75%';   // porównanie obok siebie: liczba nad „po”, nie na kresce podziału
+        el.style.left = portrait() ? '50%' : (o.x == null ? 50 : o.x * 100) + '%';   // x: środek napisu w poziomie (0..1), w pionie zawsze środek
         el.style.opacity = op; el.style.transform = `translateX(-50%) scale(${lerp(1.25, 1, e)})`;
         const lbl = el.querySelector('.lbl'); lbl.style.opacity = ease((i - o.from - 8) / 10);
         const det = el.querySelector('.det'); if (det) det.style.opacity = ease((i - o.from - 16) / 10);
@@ -260,7 +262,8 @@
           bo.style.width = (row.old / max * 100 * ease((i - s0) / 18)) + '%';
           bn.style.width = (lerp(row.old, row.new, c) / max * 100) + '%';
           bo.textContent = `PRZED ${numPL(row.old, row.dig || 0)}${row.unit || ''}`;
-          bn.textContent = c > 0.2 || row.new / max > 0.25 ? `PO ${numPL(lerp(row.old, row.new, c), row.dig || 0)}${row.unit || ''}` : '';
+          bn.classList.toggle('out', lerp(row.old, row.new, c) / max < 0.22);
+          bn.firstChild.textContent = c > 0.2 || row.new / max > 0.25 ? `PO ${numPL(lerp(row.old, row.new, c), row.dig || 0)}${row.unit || ''}` : '';
           r.querySelector('.pc').textContent = numPL(lerp(0, (row.new - row.old) / row.old * 100, c)) + '%';
         });
         const f = el.querySelector('.foot'); if (f) f.style.opacity = ease((i - o.from - 20 - o.rows.length * (o.stagger || 14)) / 20);
