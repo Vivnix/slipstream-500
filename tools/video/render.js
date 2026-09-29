@@ -4,11 +4,11 @@
    3) montaż (lista ujęć poniżej), 4) nagrywanie klatka po klatce w Chrome bez okna (capture.js + director.html, sprawdzenie zgodności z Node),
    5) muzyka i efekty (sound.js) + dźwięk gry renderowany offline, 6) ffmpeg: trailer.mp4, trailer-bez-muzyki.mp4, [trailer-pionowy.mp4], kadry PNG.
    Użycie: node tools/video/render.js [--sim sim.js] [--old-rev e3dca2c | --old stary-sim.js] [--out katalog] [--work katalog-roboczy]
-           [--vertical] (także wersja 1080×1920) [--url adres-gry] [--preview] (960×540, szybki podgląd) [--only id,id] (tylko wybrane ujęcia, bez montażu)
-           [--bench-seeds 5] [--scene-seeds 8] [--force] (bez cache ujęć)
+           [--vertical] (także wersja 1080×1920) [--preview] (960×540, szybki podgląd) [--only id,id] (tylko wybrane ujęcia, bez montażu)
+           [--bench-seeds 5] [--scene-seeds 8] [--force] (bez cache: benchmark, sceny i ujęcia liczone od nowa)
    Wymaga: Node 24+, Chrome (albo zmienna CHROME), ffmpeg w PATH, internet (three.js i czcionki z CDN). */
 'use strict';
-const fs = require('fs'), path = require('path'), os = require('os');
+const fs = require('fs'), path = require('path'), os = require('os'), crypto = require('crypto');
 const { execFileSync } = require('child_process');
 const F = require('./find.js'), { captureShots } = require('./capture.js'), SND = require('./sound.js');
 
@@ -32,10 +32,21 @@ if (!OLD) {
 OLD = path.resolve(OLD);
 const SIMS = { old: OLD, new: NEW };
 
+// cache w katalogu roboczym: klucz = skrót plików wejściowych i opcji (zmiana symulacji albo wyszukiwarki liczy od nowa)
+function cached(name, files, extra, f) {
+  const key = crypto.createHash('sha1').update(files.map(x => fs.readFileSync(x)).join('|') + JSON.stringify(extra)).digest('hex').slice(0, 12);
+  const file = path.join(WORK, `${name}-${key}.json`);
+  if (!flag('force') && fs.existsSync(file)) { log(`${name}: z cache (${path.basename(file)})`); return Promise.resolve(JSON.parse(fs.readFileSync(file, 'utf8'))); }
+  return Promise.resolve(f()).then(v => { fs.writeFileSync(file, JSON.stringify(v)); return v; });
+}
+
 // ─── 1. benchmark ───
 function bench(sim) {
-  log(`benchmark: ${path.basename(sim)}…`);
-  return JSON.parse(execFileSync(process.execPath, [path.join(REPO, 'tools', 'aibench.js'), '--seeds', arg('bench-seeds', '5'), '--json', '--sim', sim], { maxBuffer: 1 << 30 }).toString());
+  const seeds = arg('bench-seeds', '5');
+  return cached('benchmark', [sim, path.join(REPO, 'tools', 'aibench.js')], seeds, () => {
+    log(`benchmark: ${path.basename(sim)}…`);
+    return JSON.parse(execFileSync(process.execPath, [path.join(REPO, 'tools', 'aibench.js'), '--seeds', seeds, '--json', '--sim', sim], { maxBuffer: 1 << 30 }).toString());
+  });
 }
 const sum = (runs, key, f = () => true) => runs.filter(f).reduce((a, r) => a + (r[key] || 0), 0);
 const pct = (o, n) => o > 0 ? (n - o) / o * 100 : 0;
@@ -51,7 +62,10 @@ function pickStat(B, list) {
 }
 
 // ─── 2. sceny ───
-async function scenes() {
+function scenes() {
+  return cached('sceny', [OLD, NEW, path.join(__dirname, 'find.js'), path.join(__dirname, 'race.js')], [arg('scene-seeds', 8), String(findScenes), String(packMoment)], findScenes);
+}
+async function findScenes() {
   const S = +arg('scene-seeds', 8), jobs = [];
   const add = (sim, track, diffs, maxT, seeds = S) => { for (const diff of diffs) for (let seed = 1; seed <= seeds; seed++) jobs.push({ sim, simPath: SIMS[sim], track, diff, seed, maxT }); };
   for (const sim of ['old', 'new']) { add(sim, 'speedway', [10], 170); add(sim, 'intermediate', [10], 120); add(sim, 'indy', [7, 10], 110); add(sim, 'daytona', [7, 10], 110); }
@@ -125,8 +139,9 @@ function edl(S, B) {
 
   // 1. zimne otwarcie: kraksa starego AI, zwolnienie 4,5× wokół pierwszego uderzenia
   const c = S.cold, pre = 2.3, slowA = 125, slowB = 140, slowC = 330, slowD = 350;
+  // statyw jak kamera TV (na zewnątrz ściany, wysoko), ale stały przez całe ujęcie — kamera TV gry przeskakiwała na starcie
   const cold = shot('01-otwarcie', 14, {
-    views: [view(c, { type: 'game', mode: 3 }, { t0: +(c.t - pre).toFixed(2), speed: [[slowA, 1], [slowB, 0.22], [slowC, 0.22], [slowD, 1]] })],
+    views: [view(c, { type: 'tripod', ahead: 250, out: 26, h: 16, size: 12 }, { t0: +(c.t - pre).toFixed(2), speed: [[slowA, 1], [slowB, 0.22], [slowC, 0.22], [slowD, 1]] })],
     ov: [{ type: 'black', from: 0, to: 30, fadeIn: 30 }, { type: 'bars', from: 0, h: 0.1 },
       { type: 'caption', text: 'Tak było…', small: `stare AI · ${where(c)}`, from: 40, to: 390, in: 30, out: 20 }, { type: 'flash', from: 414, len: 8, peak: 0.9 }],
   });
@@ -140,9 +155,10 @@ function edl(S, B) {
     ov: [PRZED, { type: 'chapter', num: '01', title: 'Superspeedway', sub: 'Pociąg zderzak w zderzak przy ponad 300 km/h', from: 8, to: 228 }] });
   shot('04-speedway-po', 8, { views: [view(S.spNew, { type: 'heli', back: 24, up: 9, lead: 24 }, { t0: +(S.spNew.t - 1.6).toFixed(2) })],
     ov: [PO, ...statOv(stats.sp, 40, 238)] });
-  shot('05-owal-przed', 8, { views: [view(S.scOld, { type: 'track', side: -7, back: 10, h: 1.6, lead: 14 }, { t0: +(S.scOld.t - 0.6).toFixed(2) })],
+  const heliOval = { type: 'heli', back: 14, up: 6, lead: 16 };   // blisko, z góry: widać odstęp auta od bandy
+  shot('05-owal-przed', 8, { views: [view(S.scOld, heliOval, { t0: +(S.scOld.t - 0.6).toFixed(2) })],
     ov: [PRZED, { type: 'chapter', num: '02', title: 'Owal 1,5 mili', sub: 'Koniec z jazdą na styk z bandą', from: 8, to: 228 }] });
-  shot('06-owal-po', 8, { views: [view(S.scNew, { type: 'track', side: -7, back: 10, h: 1.6, lead: 14 })], ov: [PO, ...statOv(stats.sc, 40, 238)] });
+  shot('06-owal-po', 8, { views: [view(S.scNew, heliOval)], ov: [PO, ...statOv(stats.sc, 40, 238)] });
   const heliRoad = { type: 'heli', back: 22, up: 11, lead: 16 };
   shot('07-drogowe-porownanie', 12, { layout: 'split', views: [view(S.rdOld, heliRoad, { t0: +(S.rdOld.t - 2).toFixed(2) }), view(S.rdNew, heliRoad, { t0: +(S.rdNew.t - 2).toFixed(2) })],
     ov: [Object.assign({ view: 0 }, PRZED), Object.assign({ view: 1 }, PO), { type: 'chapter', num: '03', title: 'Tory drogowe', sub: 'Ten sam start, ten sam zakręt', from: 8, to: 170 }, ...statOv(stats.rd, 180, 358)] });
@@ -151,11 +167,11 @@ function edl(S, B) {
   const M = [
     [S.wide[0], { type: 'heli', back: 20, up: 6, lead: 26 }, 'Trzy rzędy przy 300 km/h', -1],
     [S.side[0], { type: 'heli', back: 12, up: 4.5, lead: 14 }, 'Koło w koło w zakręcie', -1.2],
-    [S.pass[0], { type: 'game', mode: 1 }, 'Czyste wyprzedzenie', -1],
-    [S.pack[0], { type: 'game', mode: 3 }, 'Krótki owal: ciasno, ale czysto', -0.5],
+    [S.pass[0], { type: 'heli', back: 13, up: 5, lead: 16 }, 'Czyste wyprzedzenie', 1.2],   // t kandydata = 2,6 s przed zmianą kolejności
+    [S.pack[0], { type: 'heli', back: 20, up: 8, lead: 22 }, 'Krótki owal: ciasno, ale czysto', -0.5],
     [S.wide[1] || S.wide[0], { type: 'tripod', ahead: 150, d: -16, h: 3, size: 16 }, 'Tunel aerodynamiczny', 0],
     [S.side[1] || S.pass[1] || S.side[0], { type: 'game', mode: 3 }, 'Walka bez kontaktu', -1],
-    [S.wide[2] || S.wide[0], { type: 'game', mode: 2 }, 'W środku pociągu', -0.5],
+    [S.wide[2] || S.wide[0], { type: 'game', mode: 1 }, 'W środku pociągu', -0.5],
     [S.pack[2] || S.pack[1], { type: 'heli', back: 18, up: 7, lead: 22 }, 'Daytona: banking i szykany', -1],
   ].filter(m => m[0]);
   M.forEach(([cand, cam, text, dt], k) => shot(`08-montaz-${k + 1}`, 4, { views: [view(cand, cam, { t0: +(cand.t + dt).toFixed(2) })], ov: [...(k ? [{ type: 'flash', from: 0, len: 6, peak: 0.35 }] : [flashIn]), ...chip(text, 4)] }));
@@ -171,8 +187,8 @@ function edl(S, B) {
       foot: `Benchmark: ${races} wyścigów samych kierowców AI (${tracks} torów, poziomy ${diffs}), te same starty dla starego i nowego AI.` }] });
   // 6. zakończenie
   const oc = S.wide[1] || S.wide[0];
-  shot('10-koniec', 10, { views: [view(oc, { type: 'game', mode: 3 }, { t0: +(oc.t + 2).toFixed(2), filter: 'brightness(0.62)' })],
-    ov: [flashIn, { type: 'vig', from: 0 }, { type: 'outro', cta: 'Zagraj teraz', sub: 'Nowe AI już na torze', url: arg('url', ''), from: 0 }, { type: 'black', from: 250, to: 300, fadeOut: 50 }] });
+  shot('10-koniec', 10, { views: [view(oc, { type: 'heli', back: 34, up: 14, lead: 40 }, { t0: +(oc.t + 2).toFixed(2), filter: 'brightness(0.62)' })],
+    ov: [flashIn, { type: 'vig', from: 0 }, { type: 'outro', cta: 'Zagraj teraz', sub: 'Nowe AI już na torze', from: 0 }, { type: 'black', from: 250, to: 300, fadeOut: 50 }] });
   return { shots, stats, rows };
 }
 // czas wideo [s], w którym symulacja przejdzie simT od początku ujęcia (przy zmiennej prędkości odtwarzania)
@@ -224,7 +240,7 @@ function assemble(caps, name, outName, total) {
 
 (async () => {
   const t0 = Date.now();
-  const B = { old: bench(OLD), new: bench(NEW) };
+  const B = { old: await bench(OLD), new: await bench(NEW) };
   const S = await scenes();
   const { shots, stats, rows } = edl(S, B);
   fs.writeFileSync(path.join(WORK, 'montaz.json'), JSON.stringify({ scenes: S, stats, rows, shots }, null, 1));

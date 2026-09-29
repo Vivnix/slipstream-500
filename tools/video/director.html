@@ -54,7 +54,7 @@
   .stat .det { margin-top: calc(1 * var(--u)); font: 600 calc(1.7 * var(--u))/1.2 var(--body); letter-spacing: .05em; background: rgba(10,11,14,.8); padding: calc(.5 * var(--u)) calc(1.2 * var(--u)); color: #d6d2c7; }
 
   /* napis filmowy */
-  .caption { left: calc(6 * var(--u)); bottom: calc(14 * var(--u)); font: 600 calc(4.4 * var(--u))/1 var(--display); letter-spacing: .22em; text-transform: uppercase; color: #fff; text-shadow: 0 0 calc(2 * var(--u)) rgba(0,0,0,.8); }
+  .caption { left: calc(6 * var(--u)); top: calc(10% + 4 * var(--u)); font: 600 calc(4.4 * var(--u))/1 var(--display); letter-spacing: .22em; text-transform: uppercase; color: #fff; text-shadow: 0 0 calc(2 * var(--u)) rgba(0,0,0,.8); }
   .caption small { display: block; margin-top: calc(1 * var(--u)); font: 500 calc(1.7 * var(--u))/1 var(--body); letter-spacing: .3em; color: var(--caution); }
 
   /* tytuł */
@@ -84,7 +84,6 @@
   .outro .cta { font: 800 calc(10 * var(--u))/.85 var(--display); text-transform: uppercase; transform: skewX(-9deg); background: var(--caution); color: var(--caution-ink); padding: calc(1.2 * var(--u)) calc(4 * var(--u)) calc(.6 * var(--u)); }
   .outro .name { font: 800 calc(5 * var(--u))/1 var(--display); text-transform: uppercase; transform: skewX(-9deg); letter-spacing: .03em; text-shadow: 0 0 calc(2 * var(--u)) rgba(0,0,0,.8); }
   .outro .name span { color: var(--caution); }
-  .outro .url { font: 600 calc(2.2 * var(--u))/1 var(--body); letter-spacing: .08em; background: rgba(10,11,14,.85); padding: calc(.8 * var(--u)) calc(1.6 * var(--u)); }
   .outro .sub { font: 600 calc(1.9 * var(--u))/1.2 var(--body); letter-spacing: .12em; text-transform: uppercase; color: #e8e4da; text-shadow: 0 0 calc(1.5 * var(--u)) rgba(0,0,0,.9); }
 </style>
 <div id="stage"><div id="views"></div><div class="divider"></div><div id="ov"></div></div>
@@ -166,6 +165,8 @@
       pos = W(tr, st.s - (cam.back || 8), st.d + (cam.side || 6), cam.h || 1.3);
       look = W(tr, st.s + (cam.lead || 10), st.d, 0.9);
     } else if (cam.type === 'tripod') {         // statyw przy torze: stoi, obraca się za autem i przybliża
+      // out: odległość za zewnętrzną ścianą (wysokość liczona od krawędzi toru, nie z przedłużonego nachylenia)
+      if (!st.fixed && cam.out != null) { const s = c.s + (cam.ahead || 90), p = tr.toWorld(s, (tr.outerWall || tr.halfW) + cam.out); st.fixed = [p.x, tr.height(s, tr.halfW) + (cam.h || 4), -p.y]; }
       if (!st.fixed) st.fixed = W(tr, c.s + (cam.ahead || 90), cam.d != null ? cam.d : -(tr.halfW + 6), cam.h || 4);
       pos = st.fixed; look = car;
       const dist = Math.hypot(pos[0] - car[0], pos[1] - car[1], pos[2] - car[2]);
@@ -196,7 +197,7 @@
     else if (o.type === 'caption') el.innerHTML = `${esc(o.text)}${o.small ? `<small>${esc(o.small)}</small>` : ''}`;
     else if (o.type === 'title') el.innerHTML = `<h1>Slipstream <span>500</span></h1><div class="checker"></div><h2>${esc(o.sub || 'Nowe AI')}</h2>${o.line ? `<p>${esc(o.line)}</p>` : ''}`;
     else if (o.type === 'card') el.innerHTML = `<h3>${o.title}</h3>` + o.rows.map(r => `<div class="r"><div class="nm">${esc(r.label)}</div><div class="bars2"><div class="b o"></div><div class="b n"></div></div><div class="pc"></div></div>`).join('') + (o.foot ? `<div class="foot">${esc(o.foot)}</div>` : '');
-    else if (o.type === 'outro') el.innerHTML = `<div class="name">Slipstream <span>500</span></div><div class="cta">${esc(o.cta || 'Zagraj teraz')}</div>${o.sub ? `<div class="sub">${esc(o.sub)}</div>` : ''}${o.url ? `<div class="url">${esc(o.url)}</div>` : ''}`;
+    else if (o.type === 'outro') el.innerHTML = `<div class="name">Slipstream <span>500</span></div><div class="cta">${esc(o.cta || 'Zagraj teraz')}</div>${o.sub ? `<div class="sub">${esc(o.sub)}</div>` : ''}`;
     else if (o.type === 'bars') el.style.setProperty('--bh', (o.h || 0.1) * 100 + '%');
     $('#ov').appendChild(el);
     return { o, el, parts: el.querySelectorAll('*') };
@@ -233,6 +234,7 @@
       case 'stat': {
         const k = ease((i - o.from - 4) / (o.count || 50)), v = lerp(o.countFrom == null ? 0 : o.countFrom, o.value, k);
         el.querySelector('.big').textContent = (o.prefix || '') + numPL(v, o.dig || 0) + (o.unit || '');
+        if (views.length > 1 && !portrait()) el.style.left = '75%';   // porównanie obok siebie: liczba nad „po”, nie na kresce podziału
         el.style.opacity = op; el.style.transform = `translateX(-50%) scale(${lerp(1.25, 1, e)})`;
         const lbl = el.querySelector('.lbl'); lbl.style.opacity = ease((i - o.from - 8) / 10);
         const det = el.querySelector('.det'); if (det) det.style.opacity = ease((i - o.from - 16) / 10);
@@ -266,11 +268,10 @@
       }
       case 'outro': {
         el.style.opacity = ob;
-        const nm = el.querySelector('.name'), cta = el.querySelector('.cta'), sub = el.querySelector('.sub'), url = el.querySelector('.url');
+        const nm = el.querySelector('.name'), cta = el.querySelector('.cta'), sub = el.querySelector('.sub');
         nm.style.opacity = e; nm.style.transform = `skewX(-9deg) translateY(${(1 - e) * -3}vh)`;
         const q = ease((i - o.from - 10) / 12); cta.style.opacity = q; cta.style.transform = `skewX(-9deg) scale(${lerp(1.5, 1, q) + Math.max(0, t - 1) * 0.01})`;
         if (sub) sub.style.opacity = ease((i - o.from - 22) / 12);
-        if (url) url.style.opacity = ease((i - o.from - 28) / 12);
         break;
       }
     }
