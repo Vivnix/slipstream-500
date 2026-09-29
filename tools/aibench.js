@@ -86,10 +86,12 @@ function runRace(track, diff, seed) {
         if (sg) passSign.set(key, sg);
       }
     }
+    // obrót: kąt znoszenia nadwozia (nos względem kierunku jazdy) — nie kierunek osi toru: linia wyścigowa sama potrafi
+    // przeciąć oś pod dużym kątem (indy, wyjście z R15 ~0,58 rad), a auto jedzie wtedy czysto; koniec obrotu dopiero poniżej 0,12 rad
     if (race.sub % 24 === 0) for (const c of race.cars) {
       if (c.status !== 'racing' || c.pit) continue;
-      const head = Math.abs(Sim.angDiff(c.psi, tr.frame(c.s).th)), slip = Math.abs(Math.atan2(c.v, Math.max(1, c.u)));
-      if ((head > 0.6 || slip > 0.25) && c.speed > 5) { if (!spinning.has(c)) { spinning.add(c); st.spins++; } } else spinning.delete(c);
+      const slip = Math.abs(Math.atan2(c.v, Math.max(1, c.u)));
+      if (slip > 0.25 && c.speed > 5) { if (!spinning.has(c)) { spinning.add(c); st.spins++; } } else if (slip < 0.12 || c.speed <= 5) spinning.delete(c);
       if (c.surface === 'grass') st.grassT += dt * 24;
     }
     // koniec: pierwszy auto, które przejechało zadany dystans od zielonej flagi
