@@ -2,7 +2,8 @@
 <meta charset="utf-8">
 <title>Slipstream 500 — reżyser wideo</title>
 <!-- Wideo: scena nagrywana przez tools/video/render.js. Jedna albo dwie ramki z grą (stare / nowe AI) + napisy w stylu menu gry.
-     Nic tu nie płynie w czasie rzeczywistym: każdą klatkę wywołuje nagrywarka (D.frame), więc animacje napisów są liczone z numeru klatki. -->
+     Nic tu nie płynie w czasie rzeczywistym: każdą klatkę wywołuje nagrywarka (D.frame), więc animacje napisów, wstrząsy i przejścia
+     są liczone z numeru klatki (bez Math.random) — to samo ujęcie nagrane drugi raz wygląda identycznie. -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700;800&family=Barlow:wght@400;500;600;700&display=swap">
 <style>
   :root {
@@ -13,6 +14,7 @@
   }
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; color: var(--ink); font-family: var(--body); -webkit-font-smoothing: antialiased; }
   #stage { position: fixed; inset: 0; background: var(--ground); overflow: hidden; }
+  #views { position: absolute; inset: 0; }
   .view { position: absolute; inset: 0; overflow: hidden; background: #000; }
   .view iframe { border: 0; width: 100%; height: 100%; display: block; }
   .split .view.v0 { right: 50%; } .split .view.v1 { left: 50%; }
@@ -22,72 +24,79 @@
   .portrait .divider { left: -5%; right: -5%; top: 50%; bottom: auto; width: auto; height: calc(0.55 * var(--u)); margin: calc(-0.275 * var(--u)) 0 0; transform: skewY(-4deg); }
   #ov { position: absolute; inset: 0; pointer-events: none; }
   #ov > * { position: absolute; will-change: transform, opacity; }
-  .vig { inset: 0; background: radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,.55) 100%); }
+  .portrait #ov > :not(.title) { --u: 1.3vw; }   /* w pionie kadr jest wąski: napisy (poza tytułem, który i tak wypełnia szerokość) większe */
+  .vig { inset: 0; background: radial-gradient(ellipse at center, rgba(0,0,0,0) 50%, rgba(0,0,0,.6) 100%); }
   .bars::before, .bars::after { content: ''; position: absolute; left: 0; right: 0; height: var(--bh, 10%); background: #000; }
   .bars { inset: 0; } .bars::before { top: 0; } .bars::after { bottom: 0; }
+  .portrait .bars { display: none; }   /* w pionie pasy tylko zabierają kadr */
   .flash { inset: 0; background: #fff; }
+  .flash.half0 { right: 50%; } .flash.half1 { left: 50%; }
   .black { inset: 0; background: #000; }
 
-  /* znacznik PRZED / PO w rogu kadru */
+  /* linie prędkości: dwie warstwy promieni od środka, maska zostawia czysty środek, kąt zmienia się co klatkę */
+  .speed { inset: -12%; --a: 0deg; --b: 0deg;
+    background: repeating-conic-gradient(from var(--a) at 50% 50%, rgba(255,255,255,0) 0deg 4.1deg, rgba(255,255,255,.8) 4.3deg 4.5deg, rgba(255,255,255,0) 4.7deg 7.3deg),
+                repeating-conic-gradient(from var(--b) at 50% 50%, rgba(255,255,255,0) 0deg 9.2deg, rgba(255,255,255,.55) 9.35deg 9.55deg, rgba(255,255,255,0) 9.75deg 13.1deg);
+    -webkit-mask: radial-gradient(closest-side at 50% 50%, transparent 55%, rgba(0,0,0,.5) 78%, #000 100%); mask: radial-gradient(closest-side at 50% 50%, transparent 55%, rgba(0,0,0,.5) 78%, #000 100%); }
+
+  /* znacznik PRZED / PO */
   .tag { top: calc(4 * var(--u)); display: flex; align-items: stretch; transform-origin: left center; filter: drop-shadow(0 calc(.4 * var(--u)) calc(1.2 * var(--u)) rgba(0,0,0,.5)); }
-  .tag b { font: 800 calc(4.2 * var(--u))/1 var(--display); letter-spacing: .05em; padding: calc(.9 * var(--u)) calc(2 * var(--u)) calc(.6 * var(--u)); transform: skewX(-9deg); text-transform: uppercase; }
-  .tag span { font: 600 calc(1.55 * var(--u))/1.1 var(--body); letter-spacing: .14em; text-transform: uppercase; background: rgba(10,11,14,.82); color: var(--ink); padding: 0 calc(1.4 * var(--u)); display: flex; align-items: center; transform: skewX(-9deg); margin-left: calc(-.2 * var(--u)); }
+  .tag b { font: 800 calc(4.8 * var(--u))/1 var(--display); letter-spacing: .05em; padding: calc(.9 * var(--u)) calc(2 * var(--u)) calc(.6 * var(--u)); transform: skewX(-9deg); text-transform: uppercase; }
+  .tag span { font: 700 calc(1.8 * var(--u))/1.1 var(--body); letter-spacing: .14em; text-transform: uppercase; background: rgba(10,11,14,.85); color: var(--ink); padding: 0 calc(1.4 * var(--u)); display: flex; align-items: center; transform: skewX(-9deg); margin-left: calc(-.2 * var(--u)); }
   .tag.before b { background: var(--red); color: #fff; } .tag.after b { background: var(--green); color: #07140c; }
 
   /* podpis ujęcia w montażu */
-  .chip { left: calc(4 * var(--u)); bottom: calc(6 * var(--u)); display: flex; align-items: stretch; filter: drop-shadow(0 calc(.4 * var(--u)) calc(1.2 * var(--u)) rgba(0,0,0,.5)); }
-  .chip span { font: 700 calc(1.5 * var(--u))/1 var(--body); letter-spacing: .16em; text-transform: uppercase; background: rgba(10,11,14,.85); color: var(--green); padding: 0 calc(1.2 * var(--u)); display: flex; align-items: center; transform: skewX(-9deg); }
-  .chip b { font: 800 calc(3.4 * var(--u))/1 var(--display); text-transform: uppercase; letter-spacing: .04em; background: var(--caution); color: var(--caution-ink); padding: calc(.8 * var(--u)) calc(1.8 * var(--u)) calc(.5 * var(--u)); transform: skewX(-9deg); margin-left: calc(-.2 * var(--u)); }
+  .chip { left: calc(4 * var(--u)); bottom: calc(7 * var(--u)); display: flex; align-items: stretch; filter: drop-shadow(0 calc(.4 * var(--u)) calc(1.2 * var(--u)) rgba(0,0,0,.5)); }
+  .chip span { font: 700 calc(1.7 * var(--u))/1 var(--body); letter-spacing: .16em; text-transform: uppercase; background: rgba(10,11,14,.88); color: var(--green); padding: 0 calc(1.2 * var(--u)); display: flex; align-items: center; transform: skewX(-9deg); }
+  .chip b { font: 800 calc(4.8 * var(--u))/1 var(--display); text-transform: uppercase; letter-spacing: .03em; background: var(--caution); color: var(--caution-ink); padding: calc(.8 * var(--u)) calc(2 * var(--u)) calc(.5 * var(--u)); transform: skewX(-9deg); margin-left: calc(-.2 * var(--u)); white-space: nowrap; }
+  .portrait .chip { bottom: 17%; }
 
-  /* rozdział: numer, nazwa toru, opis */
-  .chapter { left: calc(5 * var(--u)); bottom: calc(9 * var(--u)); display: flex; flex-direction: column; gap: calc(.6 * var(--u)); }
-  .chapter .row { display: flex; align-items: flex-end; gap: calc(1.4 * var(--u)); transform: skewX(-9deg); transform-origin: left bottom; }
-  .chapter .num { font: 800 calc(7 * var(--u))/.8 var(--display); color: var(--caution); }
-  .chapter .ttl { font: 800 calc(5.2 * var(--u))/.85 var(--display); text-transform: uppercase; letter-spacing: .02em; text-shadow: 0 calc(.3 * var(--u)) calc(2 * var(--u)) rgba(0,0,0,.6); }
-  .chapter .sub { font: 600 calc(1.9 * var(--u))/1.2 var(--body); letter-spacing: .06em; color: var(--ink); background: rgba(10,11,14,.78); padding: calc(.5 * var(--u)) calc(1.2 * var(--u)); align-self: flex-start; }
-  .chapter .bar { height: calc(.7 * var(--u)); background: var(--caution); transform: skewX(-9deg); transform-origin: left; }
+  /* rozdział: krótko, u góry, znika przed akcją */
+  .chapter { right: calc(4 * var(--u)); top: calc(4 * var(--u)); display: flex; align-items: flex-end; gap: calc(1.2 * var(--u)); transform-origin: right top; }
+  .chapter .num { font: 800 calc(5.6 * var(--u))/.8 var(--display); color: var(--caution); transform: skewX(-9deg); text-shadow: 0 calc(.3 * var(--u)) calc(2 * var(--u)) rgba(0,0,0,.6); }
+  .chapter .ttl { font: 800 calc(4.6 * var(--u))/.85 var(--display); text-transform: uppercase; letter-spacing: .02em; transform: skewX(-9deg); text-shadow: 0 calc(.3 * var(--u)) calc(2 * var(--u)) rgba(0,0,0,.8); white-space: nowrap; }
+  .portrait .chapter { right: auto; left: calc(4 * var(--u)); top: calc(5 * var(--u)); transform-origin: left top; }
 
-  /* wielka liczba */
-  .stat { left: 50%; bottom: calc(8 * var(--u)); transform: translateX(-50%); text-align: center; display: flex; flex-direction: column; align-items: center; }
-  .stat .big { font: 800 calc(13 * var(--u))/.82 var(--display); color: var(--caution); letter-spacing: .01em; transform: skewX(-9deg); text-shadow: 0 calc(.5 * var(--u)) calc(3 * var(--u)) rgba(0,0,0,.7); font-variant-numeric: tabular-nums; }
-  .stat .lbl { margin-top: calc(1.2 * var(--u)); font: 800 calc(3.3 * var(--u))/1 var(--display); text-transform: uppercase; letter-spacing: .04em; background: var(--flag-white); color: #111; padding: calc(.6 * var(--u)) calc(1.8 * var(--u)) calc(.4 * var(--u)); transform: skewX(-9deg); white-space: nowrap; }
-  .stat .det { margin-top: calc(1 * var(--u)); font: 600 calc(1.7 * var(--u))/1.2 var(--body); letter-spacing: .05em; background: rgba(10,11,14,.8); padding: calc(.5 * var(--u)) calc(1.2 * var(--u)); color: #d6d2c7; white-space: nowrap; }
+  /* wielka liczba nad ujęciem „po” */
+  .stat { left: 50%; bottom: calc(8 * var(--u)); display: flex; flex-direction: column; align-items: center; }
+  .stat .big { font: 800 calc(15 * var(--u))/.82 var(--display); color: var(--caution); letter-spacing: .01em; transform: skewX(-9deg); text-shadow: 0 calc(.5 * var(--u)) calc(3 * var(--u)) rgba(0,0,0,.75); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .stat .lbl { margin-top: calc(1.2 * var(--u)); font: 800 calc(3.6 * var(--u))/1 var(--display); text-transform: uppercase; letter-spacing: .04em; background: var(--flag-white); color: #111; padding: calc(.6 * var(--u)) calc(1.8 * var(--u)) calc(.4 * var(--u)); transform: skewX(-9deg); white-space: nowrap; }
+  .portrait .stat { bottom: 13%; }
 
-  /* napis filmowy */
-  .caption { left: calc(6 * var(--u)); top: calc(10% + 4 * var(--u)); font: 600 calc(4.4 * var(--u))/1 var(--display); letter-spacing: .22em; text-transform: uppercase; color: #fff; text-shadow: 0 0 calc(2 * var(--u)) rgba(0,0,0,.8); }
-  .caption small { display: block; margin-top: calc(1 * var(--u)); font: 500 calc(1.7 * var(--u))/1 var(--body); letter-spacing: .3em; color: var(--caution); }
+  /* hasło wbijane w kadr: duży napis + mała belka */
+  .punch { display: flex; flex-direction: column; align-items: flex-start; gap: calc(.9 * var(--u)); }
+  .punch.tl { left: calc(5 * var(--u)); top: calc(10% + 3 * var(--u)); }
+  .punch.bl { left: calc(5 * var(--u)); bottom: calc(8 * var(--u)); }
+  .punch.br { right: calc(4 * var(--u)); bottom: calc(8 * var(--u)); align-items: flex-end; }
+  .punch.c { left: 0; right: 0; top: 40%; align-items: center; }
+  .punch.tr { right: calc(4 * var(--u)); top: calc(12 * var(--u)); align-items: flex-end; }
+  .split .punch b { font-size: calc(5.2 * var(--u)); } .split .punch.tr { top: calc(11 * var(--u)); }
+  .split .chapter { right: auto; left: 50%; top: auto; bottom: calc(5 * var(--u)); transform-origin: center bottom; }
+  .stat.top { bottom: auto; top: calc(4 * var(--u)); }
+  .punch small { font: 700 calc(2.4 * var(--u))/1 var(--body); letter-spacing: .16em; text-transform: uppercase; background: rgba(10,11,14,.88); color: var(--caution); padding: calc(.55 * var(--u)) calc(1.3 * var(--u)); transform: skewX(-9deg); }
+  .punch.red small { color: #fff; background: var(--red); } .punch.green small { color: #07140c; background: var(--green); }
+  .punch b { display: block; font: 800 calc(7 * var(--u))/.9 var(--display); text-transform: uppercase; letter-spacing: .01em; color: #fff; text-shadow: 0 calc(.4 * var(--u)) calc(2.5 * var(--u)) rgba(0,0,0,.85); white-space: nowrap; }
+  .portrait .punch.tl { top: 11%; } .portrait .punch.bl, .portrait .punch.br { bottom: 27%; } .portrait .punch.c { top: 38%; }
+  .portrait .punch b { font-size: calc(8.6 * var(--u)); }
 
-  /* tytuł */
+  /* liczba na cały kadr (koniec montażu) */
+  .slam { inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(1.6 * var(--u)); }
+  .slam .big { font: 800 calc(30 * var(--u))/.8 var(--display); color: var(--caution); text-shadow: 0 calc(.8 * var(--u)) calc(5 * var(--u)) rgba(0,0,0,.8); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .slam .lbl { font: 800 calc(7.4 * var(--u))/1 var(--display); text-transform: uppercase; letter-spacing: .02em; background: var(--flag-white); color: #111; padding: calc(.8 * var(--u)) calc(2.6 * var(--u)) calc(.5 * var(--u)); transform: skewX(-9deg); white-space: nowrap; }
+  .portrait .slam .big { font-size: calc(34 * var(--u)); } .portrait .slam .lbl { font-size: calc(7.8 * var(--u)); }
+
+  /* tytuł i logo na końcu */
   .title { inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(1.4 * var(--u)); }
-  .title h1 { margin: 0; font: 800 calc(13 * var(--u))/.85 var(--display); text-transform: uppercase; letter-spacing: .01em; transform: skewX(-9deg); text-shadow: 0 calc(.6 * var(--u)) calc(4 * var(--u)) rgba(0,0,0,.65); white-space: nowrap; }
+  .title h1 { margin: 0; font: 800 calc(14 * var(--u))/.85 var(--display); text-transform: uppercase; letter-spacing: .01em; text-shadow: 0 calc(.6 * var(--u)) calc(4 * var(--u)) rgba(0,0,0,.7); white-space: nowrap; }
   .title h1 span { color: var(--caution); }
   .title .checker { height: calc(1.3 * var(--u)); width: calc(30 * var(--u)); background: repeating-conic-gradient(var(--flag-white) 0 25%, #111 0 50%) 0 0 / calc(1.3 * var(--u)) calc(1.3 * var(--u)); transform: skewX(-9deg); }
-  .title h2 { margin: 0; font: 800 calc(6.4 * var(--u))/1 var(--display); letter-spacing: .12em; text-transform: uppercase; background: var(--caution); color: var(--caution-ink); padding: calc(.7 * var(--u)) calc(3 * var(--u)) calc(.4 * var(--u)); transform: skewX(-9deg); }
-  .title p { margin: 0; font: 600 calc(2.1 * var(--u))/1.3 var(--body); letter-spacing: .1em; color: #e8e4da; text-shadow: 0 0 calc(1.5 * var(--u)) rgba(0,0,0,.9); }
-
-  /* tablica wyników benchmarku */
-  .card { inset: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 calc(9 * var(--u)); gap: calc(1.3 * var(--u)); }
-  .card h3 { margin: 0 0 calc(1.2 * var(--u)); font: 800 calc(5.6 * var(--u))/.9 var(--display); text-transform: uppercase; letter-spacing: .02em; transform: skewX(-9deg); transform-origin: left; }
-  .card h3 span { color: var(--caution); }
-  .card .r { display: grid; grid-template-columns: calc(28 * var(--u)) 1fr calc(15 * var(--u)); align-items: center; gap: calc(2 * var(--u)); }
-  .card .nm { font: 700 calc(2.7 * var(--u))/1 var(--display); text-transform: uppercase; letter-spacing: .05em; }
-  .card .bars2 { display: flex; flex-direction: column; gap: calc(.45 * var(--u)); }
-  .card .b { height: calc(1.9 * var(--u)); transform: skewX(-9deg); transform-origin: left; display: flex; align-items: center; font: 700 calc(1.5 * var(--u))/1 var(--display); padding-left: calc(.8 * var(--u)); white-space: nowrap; letter-spacing: .05em; }
-  .card .b.o { background: #7d2a2d; color: #ffd9da; } .card .b.n { background: var(--green); color: #07140c; min-width: calc(.6 * var(--u)); position: relative; }
-  .card .b i { font-style: normal; } .card .b.n.out i { position: absolute; left: 100%; margin-left: calc(.8 * var(--u)); color: var(--green); }   /* krótki pasek: wartość obok, nie w środku */
-  .card .pc { font: 800 calc(5.4 * var(--u))/1 var(--display); color: var(--caution); text-align: right; transform: skewX(-9deg); font-variant-numeric: tabular-nums; }
-  .card .foot { margin-top: calc(1.5 * var(--u)); font: 500 calc(1.5 * var(--u))/1.3 var(--body); color: var(--muted); letter-spacing: .04em; }
-  .portrait .card { padding: 0 calc(5 * var(--u)); }
-  .portrait #ov > :not(.title) { --u: 1.3vw; }   /* w pionie kadr jest wąski: napisy (poza tytułem, który i tak wypełnia szerokość) większe */
-  .portrait .card .r { grid-template-columns: 1fr calc(15 * var(--u)); } .portrait .card .bars2 { grid-column: 1 / -1; grid-row: 2; }
-
-  /* zakończenie */
-  .outro { inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(1.6 * var(--u)); }
-  .outro .cta { font: 800 calc(10 * var(--u))/.85 var(--display); text-transform: uppercase; transform: skewX(-9deg); background: var(--caution); color: var(--caution-ink); padding: calc(1.2 * var(--u)) calc(4 * var(--u)) calc(.6 * var(--u)); }
-  .outro .name { font: 800 calc(5 * var(--u))/1 var(--display); text-transform: uppercase; transform: skewX(-9deg); letter-spacing: .03em; text-shadow: 0 0 calc(2 * var(--u)) rgba(0,0,0,.8); }
-  .outro .name span { color: var(--caution); }
-  .outro .sub { font: 600 calc(1.9 * var(--u))/1.2 var(--body); letter-spacing: .12em; text-transform: uppercase; color: #e8e4da; text-shadow: 0 0 calc(1.5 * var(--u)) rgba(0,0,0,.9); }
+  .title h2 { margin: 0; font: 800 calc(7 * var(--u))/1 var(--display); letter-spacing: .12em; text-transform: uppercase; background: var(--caution); color: var(--caution-ink); padding: calc(.7 * var(--u)) calc(3 * var(--u)) calc(.4 * var(--u)); transform: skewX(-9deg); }
+  .title p { margin: calc(1.6 * var(--u)) 0 0; font: 800 calc(5.4 * var(--u))/1 var(--display); letter-spacing: .03em; text-transform: uppercase; color: #fff; background: rgba(10,11,14,.88); padding: calc(.9 * var(--u)) calc(2.4 * var(--u)) calc(.5 * var(--u)); white-space: nowrap; }
+  .title p em { font-style: normal; color: var(--caution); }
+  .portrait .title h1 { font-size: calc(13.5 * var(--u)); }
+  .portrait .title p { font-size: calc(6.2 * var(--u)); display: flex; flex-direction: column; align-items: center; gap: calc(1 * var(--u)); }
 </style>
+<svg width="0" height="0" style="position:absolute"><filter id="mblur" x="-10%" y="0" width="120%" height="100%"><feGaussianBlur id="mblurG" stdDeviation="0 0"/></filter></svg>
 <div id="stage"><div id="views"></div><div class="divider"></div><div id="ov"></div></div>
 <script>
 'use strict';
@@ -95,13 +104,15 @@
   const $ = s => document.querySelector(s);
   const clamp = (x, a, b) => x < a ? a : x > b ? b : x, lerp = (a, b, t) => a + (b - a) * t;
   const ease = t => 1 - Math.pow(1 - clamp(t, 0, 1), 3), easeIn = t => Math.pow(clamp(t, 0, 1), 3);
-  const FPS = 60;
+  const FPS = 60, GRADE = 'contrast(1.12) saturate(1.25)';
+  // powtarzalny „szum” z czasu: kilka sinusów o niewspółmiernych częstotliwościach
+  const nz = (t, k) => Math.sin(t * (23.1 + k * 7.7) + k) * 0.5 + Math.sin(t * (51.7 + k * 3.1) + 2 * k) * 0.3 + Math.sin(t * (9.3 + k) + 3 * k) * 0.2;
   let views = [], items = [], shot = null;
 
   // ─── ramki z grą ───
   const waitFor = (f, ms = 30000) => new Promise((res, rej) => { const t0 = Date.now(); const k = () => { let v; try { v = f(); } catch (e) { /* jeszcze nie */ } if (v) res(v); else if (Date.now() - t0 > ms) rej(new Error('czas minął')); else setTimeout(k, 30); }; k(); });
   function script(win, src) { return new Promise((res, rej) => { const s = win.document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; win.document.head.appendChild(s); }); }
-  // prędkość odtwarzania w klatce i: [[klatka, mnożnik], …] liniowo; 1 = czas rzeczywisty, 0,25 = zwolnienie 4×, 0 = stop-klatka
+  // prędkość odtwarzania w klatce i: [[klatka, mnożnik], …] liniowo; 1 = czas rzeczywisty, 0,25 = zwolnienie 4×, 1,5 = przyspieszenie
   function speedAt(sp, i) {
     if (!sp || !sp.length) return 1;
     if (i <= sp[0][0]) return sp[0][1];
@@ -136,14 +147,17 @@
     const car = race.cars[v.focus];
     S.focus = car;
     if (v.audio) { race.player = car; race.vCtl = { steer: car.ctl.steer, throttle: car.ctl.throttle, brake: car.ctl.brake }; }
-    const view = { el, ifr, win, S, race, v, car, cam: Object.assign({}, v.cam), st: null, SUB };
+    const view = { el, ifr, win, S, race, v, car, cam: Object.assign({}, v.cam), st: null, SUB, idx, i: -1, live: false };
     S.setCam(view.cam.type === 'game' ? view.cam.mode : 0);
     // szersze pudło cieni dla kamer z daleka
     const R = view.cam.shadow || (view.cam.type === 'game' && view.cam.mode < 3 ? 60 : 110);
     Object.assign(S.sun.shadow.camera, { left: -R, right: R, top: R, bottom: -R }); S.sun.shadow.camera.updateProjectionMatrix();
     for (let i = 0; i < pre; i++) { S.step(sp0 / FPS); camera(view, sp0 / FPS, 1 / FPS); }
+    view.live = true;
     if (v.audio) { win.dispatchEvent(new win.KeyboardEvent('keydown', { code: 'F24' })); view.vac = win.__vac; }
-    if (v.filter) el.style.filter = v.filter;
+    // korekcja barwna: więcej kontrastu i nasycenia niż w grze (pastelowy zachód słońca w wideo wygląda płasko)
+    view.filter = v.grade === false ? (v.filter || '') : GRADE + (v.filter ? ' ' + v.filter : '');
+    el.style.filter = view.filter;
     return view;
   }
 
@@ -152,25 +166,32 @@
   function camera(view, sdt, vdt) {
     const { S, race, cam } = view, tr = race.track, c = S.focus || view.car;
     if (cam.type === 'game' || !c) return;
+    if (cam.type === 'tripod' && !view.live) return;   // statyw stawiamy w pierwszej klatce ujęcia (auto dojeżdża do niego po aheadT s)
     let st = view.st;
     const snap = !st;
     if (!st) st = view.st = { s: c.s, d: c.d, pos: null, look: null, a: cam.a0 || 0, fixed: null };
     // wzdłuż toru kamera jedzie razem z autem (bez opóźnienia), w poprzek łagodnie — nie kołysze się przy zmianie pasa
     st.s = c.s;
     st.d = lerp(st.d, c.d, snap ? 1 : 1 - Math.exp(-sdt * 2.5));
-    let pos, look, fov = cam.fov || 50;
+    const P = portrait();
+    let pos, look, fov = cam.fov || 50, moving = true;
     const car = [c.x, tr.height(c.s, c.d) + 0.8, -c.y];
     if (cam.type === 'heli') {
       // w pionie kadr jest wąski — kamera bliżej osi auta, żeby nie uciekało za krawędź
-      const P = portrait();
       pos = W(tr, st.s - (cam.back || 34), st.d * (P ? 0.8 : 0.4) + (cam.side || 0), cam.up || 13);
       look = W(tr, st.s + (cam.lead || 18), st.d * (P ? 0.95 : 0.7), 0.5);
     } else if (cam.type === 'track') {          // nisko, z boku, jak samochód z kamerą
-      pos = W(tr, st.s - (cam.back || 8), st.d + (cam.side || 6), cam.h || 1.3);
+      const h = P ? Math.max(cam.h || 1.3, cam.hP || 1.8) : (cam.h || 1.3);
+      pos = W(tr, st.s - (cam.back || 8), st.d + (cam.side || 6), h);
       look = W(tr, st.s + (cam.lead || 10), st.d, 0.9);
     } else if (cam.type === 'tripod') {         // statyw przy torze: stoi, obraca się za autem i przybliża
-      if (!st.fixed) st.fixed = W(tr, c.s + (cam.ahead || 90), cam.d != null ? cam.d : -(tr.halfW + 6), cam.h || 4);
-      pos = st.fixed; look = car;
+      if (!st.fixed) {
+        const ahead = cam.aheadT != null ? Math.max(15, c.speed * cam.aheadT) : (cam.ahead || 90);
+        // wall: ±1 — na bandzie (strona toru), edge: ±1 — przy krawędzi asfaltu, off: odsunięcie na zewnątrz [m]
+        const d = cam.wall ? cam.wall * (tr.wallOut(c.s + ahead) + (cam.off || 0)) : cam.edge ? cam.edge * (tr.halfW + (cam.off || 0)) : cam.d != null ? cam.d : -(tr.halfW + 6);
+        st.fixed = W(tr, c.s + ahead, d, cam.h || 4);
+      }
+      pos = st.fixed; look = car; moving = false;
       const dist = Math.hypot(pos[0] - car[0], pos[1] - car[1], pos[2] - car[2]);
       fov = clamp(2 * Math.atan((cam.size || 9) / dist) * 180 / Math.PI, cam.minFov || 4, cam.maxFov || 60);
     } else if (cam.type === 'orbit') {
@@ -178,12 +199,31 @@
       const r = cam.r || 14;
       pos = [car[0] + Math.cos(st.a) * r, car[1] + (cam.h || 4), car[2] + Math.sin(st.a) * r]; look = car;
     }
+    // pion: horyzont wysoko (hz 0,6 → ok. 20% od góry), auta w dolnych dwóch trzecich kadru zamiast pustego nieba
+    if (P && (cam.type === 'heli' || cam.type === 'track')) {
+      const hz = cam.hz == null ? 0.6 : cam.hz, hl = Math.hypot(look[0] - pos[0], look[2] - pos[2]);
+      const minPitch = Math.atan(hz * Math.tan(fov * Math.PI / 360)), pitch = Math.atan2(pos[1] - look[1], hl);
+      if (pitch < minPitch) look = [look[0], pos[1] - hl * Math.tan(minPitch), look[2]];
+    }
     st.pos = pos;
     st.look = st.look && cam.type === 'tripod' ? st.look.map((x, i) => lerp(x, look[i], 1 - Math.exp(-sdt * 10))) : look;
+    // wstrząs: drgania kamery rosną z prędkością auta, do tego impulsy przy uderzeniach (view.v.shakes: [[klatka, siła]])
+    const t = Math.max(0, view.i) / FPS + view.idx * 7.3;
+    let imp = 0; for (const [f, a] of view.v.shakes || []) if (view.i >= f) imp += a * Math.exp(-(view.i - f) / 10);
+    const base = (cam.shake == null ? 1 : cam.shake) * clamp(c.speed / 85, 0.15, 1.3);
+    const pa = moving ? base * 0.08 + imp * 0.35 : 0;
     const C = S.camera;
-    C.position.set(st.pos[0], st.pos[1], st.pos[2]); C.up.set(0, 1, 0); C.lookAt(st.look[0], st.look[1], st.look[2]);
+    C.position.set(st.pos[0] + nz(t, 1) * pa, st.pos[1] + nz(t, 2) * pa * 0.6, st.pos[2] + nz(t, 3) * pa);
+    C.up.set(0, 1, 0); C.lookAt(st.look[0], st.look[1], st.look[2]);
     st.fov = st.fov == null || snap ? fov : lerp(st.fov, fov, 1 - Math.exp(-vdt * 6));
-    C.fov = st.fov; C.updateProjectionMatrix();
+    // uderzenie zoomu na początku ujęcia: szeroko → docelowo w punchLen klatek
+    const punch = cam.punch && view.live ? lerp(cam.punch, 1, ease(view.i / (cam.punchLen || 10))) : 1;
+    C.fov = Math.min(120, st.fov * punch);
+    const aa = (base * 0.0012 + imp * 0.018) * C.fov / 50;
+    C.rotateX(nz(t, 4) * aa); C.rotateY(nz(t, 5) * aa);
+    // szarpnięcie kamery na wejściu (whip pan): obrót w bok gaśnie w whip klatek
+    if (cam.whip && view.live && view.i < Math.abs(cam.whip)) C.rotateY(Math.sign(cam.whip) * Math.pow(1 - view.i / Math.abs(cam.whip), 2) * 0.55);
+    C.updateProjectionMatrix();
     S.sky.position.copy(C.position);
   }
 
@@ -194,99 +234,102 @@
     const el = document.createElement('div'); el.className = o.type;
     if (o.type === 'tag') { el.classList.add(o.kind); el.innerHTML = `<b>${esc(o.text)}</b><span>${esc(o.sub || '')}</span>`; }
     else if (o.type === 'chip') el.innerHTML = `<span>Nowe AI</span><b>${esc(o.text)}</b>`;
-    else if (o.type === 'chapter') el.innerHTML = `<div class="row"><div class="num">${esc(o.num)}</div><div class="ttl">${esc(o.title)}</div></div><div class="bar"></div><div class="sub">${esc(o.sub || '')}</div>`;
-    else if (o.type === 'stat') el.innerHTML = `<div class="big"></div><div class="lbl">${esc(o.label)}</div>${o.detail ? `<div class="det">${esc(o.detail)}</div>` : ''}`;
-    else if (o.type === 'caption') el.innerHTML = `${esc(o.text)}${o.small ? `<small>${esc(o.small)}</small>` : ''}`;
-    else if (o.type === 'title') el.innerHTML = `<h1>Slipstream <span>500</span></h1><div class="checker"></div><h2>${esc(o.sub || 'Nowe AI')}</h2>${o.line ? `<p>${esc(o.line)}</p>` : ''}`;
-    else if (o.type === 'card') el.innerHTML = `<h3>${o.title}</h3>` + o.rows.map(r => `<div class="r"><div class="nm">${esc(r.label)}</div><div class="bars2"><div class="b o"></div><div class="b n"><i></i></div></div><div class="pc"></div></div>`).join('') + (o.foot ? `<div class="foot">${esc(o.foot)}</div>` : '');
-    else if (o.type === 'outro') el.innerHTML = `<div class="name">Slipstream <span>500</span></div><div class="cta">${esc(o.cta || 'Zagraj teraz')}</div>${o.sub ? `<div class="sub">${esc(o.sub)}</div>` : ''}`;
+    else if (o.type === 'chapter') el.innerHTML = `<div class="num">${esc(o.num)}</div><div class="ttl">${esc(o.title)}</div>`;
+    else if (o.type === 'stat' || o.type === 'slam') { if (o.pos && !portrait()) el.classList.add(o.pos); el.innerHTML = `<div class="big"></div><div class="lbl">${esc(o.label)}</div>`; }
+    else if (o.type === 'punch') { el.classList.add(o.pos || 'tl'); if (o.color) el.classList.add(o.color); el.innerHTML = `${o.small ? `<small>${esc(o.small)}</small>` : ''}<b>${esc(o.text)}</b>`; }
+    else if (o.type === 'title') {
+      // hasło: „część 1|część 2” — druga część na żółto
+      const line = o.line ? o.line.split('|').map((x, k) => k ? `<em>${esc(x)}</em>` : `<span>${esc(x)}</span>`).join(' ') : '';
+      el.innerHTML = `<h1>Slipstream <span>500</span></h1><div class="checker"></div><h2>${esc(o.sub || 'Nowe AI')}</h2>${line ? `<p>${line}</p>` : ''}`;
+    }
+    else if (o.type === 'flash') { if (o.color) el.style.background = o.color; if (o.view != null && shot.layout === 'split' && !portrait()) el.classList.add('half' + o.view); }
     else if (o.type === 'bars') el.style.setProperty('--bh', (o.h || 0.1) * 100 + '%');
+    else if (o.type === 'shake' || o.type === 'blur') el.style.display = 'none';
     $('#ov').appendChild(el);
-    return { o, el, parts: el.querySelectorAll('*') };
+    return { o, el };
   }
   const portrait = () => innerHeight > innerWidth;
   // okno widoczności: wejście (in klatek), zejście (out klatek) — zwraca [0..1] wejścia i wyjścia
   function env(o, i) { const a = (i - o.from) / (o.in || 12), b = ((o.to == null ? 1e9 : o.to) - i) / (o.out || 10); return [clamp(a, 0, 1), clamp(b, 0, 1)]; }
   function animate(it, i) {
-    const { o, el } = it, [ia, ob] = env(o, i), vis = i >= o.from && (o.to == null || i <= o.to);
+    const { o, el } = it;
+    if (o.type === 'shake' || o.type === 'blur') return;
+    const [ia, ob] = env(o, i), vis = i >= o.from && (o.to == null || i <= o.to);
     el.style.display = vis ? '' : 'none';
     if (!vis) return;
-    const e = ease(ia), x = easeIn(1 - ob), op = Math.min(e, ob);
-    const t = (i - o.from) / FPS;
+    const e = ease(ia), x = easeIn(1 - ob), op = Math.min(e, ob), f = i - o.from;
+    const slam = n => ease(f / n);   // wbicie: pełna skala po n klatkach
     switch (o.type) {
-      case 'flash': el.style.opacity = (o.peak || 0.9) * Math.pow(clamp(1 - (i - o.from) / (o.len || 14), 0, 1), 2); break;
-      case 'black': el.style.opacity = o.fadeIn ? 1 - clamp((i - o.from) / o.fadeIn, 0, 1) : o.fadeOut ? clamp((i - o.from) / o.fadeOut, 0, 1) : 1; break;
+      case 'flash': el.style.opacity = (o.peak || 0.9) * Math.pow(clamp(1 - f / (o.len || 14), 0, 1), 2); break;
+      case 'black': el.style.opacity = o.fadeIn ? 1 - clamp(f / o.fadeIn, 0, 1) : o.fadeOut ? clamp(f / o.fadeOut, 0, 1) : 1; break;
       case 'vig': el.style.opacity = o.op || 1; break;
       case 'bars': el.style.opacity = 1; el.style.transform = `scaleY(${lerp(1.4, 1, e)})`; break;
+      case 'speed': {
+        el.style.setProperty('--a', (i * 137.508) % 360 + 'deg'); el.style.setProperty('--b', (i * 61.8 + 17) % 360 + 'deg');
+        el.style.opacity = (o.op || 0.35) * Math.min(ease(f / 4), ob); el.style.transform = `scale(${1 + (i % 3) * 0.02})`;
+        break;
+      }
       case 'tag': {
         const right = views.length > 1 && o.view === 1, P = portrait();
-        const base = P && views.length > 1 ? (o.view === 1 ? 'top: calc(53% + 2 * var(--u));' : '') : '';
-        el.style.cssText = base + (right && !P ? 'left: calc(52% + 2 * var(--u));' : 'left: calc(4 * var(--u));');
-        el.style.opacity = op; el.style.transform = `translateX(${(1 - e) * -6 - x * 6}vw)`; break;
+        let css = right && !P ? 'left: calc(52% + 2 * var(--u));' : 'left: calc(4 * var(--u));';
+        if (P) css += views.length > 1 ? (o.view === 1 ? 'top: calc(53% + 2 * var(--u));' : '') : 'top: 60%;';
+        el.style.cssText = css;
+        el.style.opacity = op; el.style.transform = `translateX(${(1 - ease(f / 6)) * -6 - x * 6}vw)`; break;
       }
-      case 'chip': el.style.opacity = op; el.style.transform = `translateX(${(1 - e) * -8 - x * 8}vw)`; break;
-      case 'chapter': {
-        el.style.opacity = ob;
-        const [row, bar, sub] = [el.querySelector('.row'), el.querySelector('.bar'), el.querySelector('.sub')];
-        row.style.transform = `skewX(-9deg) translateX(${(1 - e) * -40}vw)`;
-        bar.style.transform = `skewX(-9deg) scaleX(${ease((i - o.from - 4) / 16)})`;
-        sub.style.opacity = ease((i - o.from - 10) / 12); sub.style.transform = `translateY(${(1 - ease((i - o.from - 10) / 12)) * 2}vh)`;
+      case 'chip': el.style.opacity = Math.min(ease(f / 3), ob); el.style.transform = `translateX(${(1 - slam(6)) * -10 - x * 8}vw)`; break;
+      case 'chapter': el.style.opacity = Math.min(ease(f / 3), ob); el.style.transform = (shot.layout === 'split' && !portrait() ? 'translateX(-50%) ' : '') + `scale(${lerp(1.8, 1, slam(6))})`; break;
+      case 'stat': case 'slam': {
+        // liczba wbija się od ok. 60% wartości (pierwsze, co widać, to już duża liczba — nie „0%”)
+        const k = ease(f / (o.count || 12)), v = lerp(o.countFrom == null ? o.value * 0.6 : o.countFrom, o.value, k);
+        const big = el.querySelector('.big'), lbl = el.querySelector('.lbl');
+        big.textContent = (o.prefix || '') + numPL(v, o.dig || 0) + (o.unit || '');
+        big.style.transform = `skewX(-9deg) scale(${lerp(2.2, 1, slam(6))})`;
+        if (o.type === 'stat') el.style.left = portrait() ? '50%' : (o.x == null ? 50 : o.x * 100) + '%';   // x: środek napisu w poziomie (0..1)
+        el.style.opacity = Math.min(ease(f / 3), ob);
+        el.style.transform = (o.type === 'stat' ? 'translateX(-50%) ' : '') + `scale(${1 + f * 0.0008})`;
+        lbl.style.opacity = ease((f - 4) / 5); lbl.style.transform = `skewX(-9deg) translateY(${(1 - ease((f - 4) / 6)) * 3}vh)`;
         break;
       }
-      case 'stat': {
-        const k = ease((i - o.from - 4) / (o.count || 50)), v = lerp(o.countFrom == null ? 0 : o.countFrom, o.value, k);
-        el.querySelector('.big').textContent = (o.prefix || '') + numPL(v, o.dig || 0) + (o.unit || '');
-        el.style.left = portrait() ? '50%' : (o.x == null ? 50 : o.x * 100) + '%';   // x: środek napisu w poziomie (0..1), w pionie zawsze środek
-        el.style.opacity = op; el.style.transform = `translateX(-50%) scale(${lerp(1.25, 1, e)})`;
-        const lbl = el.querySelector('.lbl'); lbl.style.opacity = ease((i - o.from - 8) / 10);
-        const det = el.querySelector('.det'); if (det) det.style.opacity = ease((i - o.from - 16) / 10);
+      case 'punch': {
+        const b = el.querySelector('b'), sm = el.querySelector('small');
+        el.style.opacity = Math.min(clamp(f / 2, 0, 1), ob);
+        b.style.transform = `skewX(-9deg) scale(${lerp(2.2, 1, slam(6)) + f * 0.0006})`;
+        b.style.transformOrigin = o.pos === 'c' ? 'center' : o.pos === 'br' || o.pos === 'tr' ? 'right center' : 'left center';
+        if (sm) { sm.style.opacity = ease((f - 3) / 5); sm.style.transform = `skewX(-9deg) translateX(${(1 - ease((f - 3) / 6)) * -4}vw)`; }
         break;
       }
-      case 'caption': el.style.opacity = op; el.style.letterSpacing = lerp(0.4, 0.22, e) + 'em'; break;
       case 'title': {
         el.style.opacity = ob;
         const h1 = el.querySelector('h1'), h2 = el.querySelector('h2'), ch = el.querySelector('.checker'), p = el.querySelector('p');
-        h1.style.transform = `skewX(-9deg) scale(${lerp(1.6, 1, e) + t * 0.012})`; h1.style.opacity = e; h1.style.letterSpacing = lerp(0.25, 0.01, e) + 'em';
-        ch.style.transform = `skewX(-9deg) scaleX(${ease((i - o.from - 6) / 14)})`;
-        h2.style.transform = `skewX(-9deg) translateY(${(1 - ease((i - o.from - 12) / 12)) * 6}vh)`; h2.style.opacity = ease((i - o.from - 12) / 10);
-        if (p) p.style.opacity = ease((i - o.from - 26) / 14);
-        break;
-      }
-      case 'card': {
-        el.style.opacity = ob;
-        const h3 = el.querySelector('h3'); h3.style.opacity = e; h3.style.transform = `skewX(-9deg) translateX(${(1 - e) * -10}vw)`;
-        el.querySelectorAll('.r').forEach((r, n) => {
-          const row = o.rows[n], s0 = o.from + 10 + n * (o.stagger || 14), q = ease((i - s0) / 12), c = ease((i - s0 - 8) / 40);
-          r.style.opacity = q; r.style.transform = `translateX(${(1 - q) * 6}vw)`;
-          const max = Math.max(row.old, row.new) || 1, bo = r.querySelector('.b.o'), bn = r.querySelector('.b.n');
-          bo.style.width = (row.old / max * 100 * ease((i - s0) / 18)) + '%';
-          bn.style.width = (lerp(row.old, row.new, c) / max * 100) + '%';
-          bo.textContent = `PRZED ${numPL(row.old, row.dig || 0)}${row.unit || ''}`;
-          bn.classList.toggle('out', lerp(row.old, row.new, c) / max < 0.22);
-          bn.firstChild.textContent = c > 0.2 || row.new / max > 0.25 ? `PO ${numPL(lerp(row.old, row.new, c), row.dig || 0)}${row.unit || ''}` : '';
-          r.querySelector('.pc').textContent = numPL(lerp(0, (row.new - row.old) / row.old * 100, c)) + '%';
-        });
-        const f = el.querySelector('.foot'); if (f) f.style.opacity = ease((i - o.from - 20 - o.rows.length * (o.stagger || 14)) / 20);
-        break;
-      }
-      case 'outro': {
-        el.style.opacity = ob;
-        const nm = el.querySelector('.name'), cta = el.querySelector('.cta'), sub = el.querySelector('.sub');
-        nm.style.opacity = e; nm.style.transform = `skewX(-9deg) translateY(${(1 - e) * -3}vh)`;
-        const q = ease((i - o.from - 10) / 12); cta.style.opacity = q; cta.style.transform = `skewX(-9deg) scale(${lerp(1.5, 1, q) + Math.max(0, t - 1) * 0.01})`;
-        if (sub) sub.style.opacity = ease((i - o.from - 22) / 12);
+        h1.style.transform = `skewX(-9deg) scale(${lerp(2.5, 1, slam(6)) + f * 0.0008})`; h1.style.opacity = clamp(f / 2, 0, 1);
+        ch.style.transform = `skewX(-9deg) scaleX(${ease((f - 3) / 8)})`;
+        h2.style.transform = `skewX(-9deg) scale(${lerp(1.9, 1, ease((f - 5) / 6))})`; h2.style.opacity = clamp((f - 5) / 2, 0, 1);
+        if (p) { const g = i - (o.lineAt || 30); p.style.opacity = clamp(g / 2, 0, 1); p.style.transform = `skewX(-9deg) scale(${lerp(2, 1, ease(g / 6))})`; }
         break;
       }
     }
   }
+  // wstrząs całego kadru (napisy razem z obrazem) i rozmycie ruchu na przejściach — liczone ze wszystkich aktywnych pozycji
+  function stageFx(i) {
+    let sx = 0, sy = 0, bl = 0;
+    for (const { o } of items) {
+      const f = i - o.from;
+      if (o.type === 'shake' && f >= 0) { const k = Math.exp(-f / (o.len || 10)), t = i / FPS; sx += nz(t * 1.9, 6) * o.amp * k; sy += nz(t * 1.9, 7) * o.amp * k * 0.7; }
+      if (o.type === 'blur' && f >= 0 && f < (o.len || 6)) bl = Math.max(bl, (o.px || 26) * Math.pow(1 - f / (o.len || 6), 1.5));
+    }
+    $('#stage').style.transform = sx || sy ? `translate(${sx}%, ${sy}%) scale(1.035)` : '';
+    $('#mblurG').setAttribute('stdDeviation', `${(bl * innerWidth / 960).toFixed(2)} 0`);
+    for (const v of views) v.el.style.filter = (v.filter || '') + (bl > 0.2 ? ' url(#mblur)' : '');
+  }
 
   // ─── API dla nagrywarki ───
   window.D = {
-    // shot: { layout: 'full'|'split'|'none', frames, views: [{ sim, spec, t0, focus, cam, speed, pre, audio, filter }], ov: [...] }
+    // shot: { layout: 'full'|'split'|'none', frames, views: [{ sim, spec, t0, focus, cam, speed, pre, audio, filter, shakes }], ov: [...] }
     async setup(s) {
       for (const v of views) v.el.remove();
       views = []; items = []; $('#ov').innerHTML = ''; shot = s;
       $('#stage').className = (s.layout || 'full') + (portrait() ? ' portrait' : '');
+      $('#stage').style.transform = '';
       // ramki ładujemy po kolei (ustawienia gry w localStorage są wspólne)
       for (let k = 0; k < (s.views || []).length; k++) views.push(await makeView(s.views[k], k, s.frames));
       items = (s.ov || []).map(build);
@@ -296,10 +339,12 @@
     async frame(i) {
       for (const view of views) {
         const sp = speedAt(view.v.speed, i), dt = sp / FPS;
+        view.i = i;
         view.S.step(dt); camera(view, dt, 1 / FPS);
         view.S.renderer.render(view.S.scene, view.S.camera);
       }
       for (const it of items) animate(it, i);
+      stageFx(i);
       // dźwięk gry: renderowanie offline do końca tej klatki
       for (const view of views) if (view.vac) await view.vac.vAdvance((i + 1) / FPS);
     },

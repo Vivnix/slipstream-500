@@ -88,7 +88,7 @@ function scrapes(run) {
       else if (start >= 0 && ++gap > 3) {
         const dur = n * DT_S, row = run.samples[start], me = row[c];
         const near = row.filter((r, j) => j !== c && r[4] && Math.abs(r[2] - me[2]) < 60).length;
-        if (dur >= 0.8) out.push({ kind: 'scrape', sim: run.sim, track: run.track, diff: run.diff, seed: run.seed, t: (start + 1) * DT_S, focus: c, dur, score: Math.min(dur, 5) * (0.5 + me[3] / 80) + near * 0.3 });
+        if (dur >= 0.8) out.push({ kind: 'scrape', sim: run.sim, track: run.track, diff: run.diff, seed: run.seed, t: (start + 1) * DT_S, focus: c, dur, side: Math.sign(me[1]) || 1, v: me[3], score: Math.min(dur, 5) * (0.5 + me[3] / 80) + near * 0.3 });
         start = -1;
       }
     }
@@ -187,10 +187,50 @@ function cleanNear(run, focus, t, dur = 5) {
   return best;
 }
 
+// gęstość stawki: średnia liczba aut w wyścigu (z wybranym) w promieniu R m wzdłuż toru od auta focus w oknie [t, t+win]
+function density(run, t, focus, win = 3, R = 45) {
+  let n = 0, k = 0;
+  for (let i = idx(t); i <= idx(t + win) && i < run.samples.length; i++) {
+    const row = run.samples[i], me = row[focus]; if (!me) break;
+    n += row.filter(x => x[4] && Math.abs(x[2] - me[2]) < R).length; k++;
+  }
+  return k ? n / k : 0;
+}
+// auto, za którym kamera z tyłu widzi najwięcej stawki: spośród aut w ±70 m od auta near to, które ma przed sobą (do R m)
+// najwięcej aut w oknie [t, t+win] — „po” ma pokazać pełną stawkę, a nie auto na czele z resztą za plecami kamery
+function chaseFocus(run, t, near, win = 3, R = 50) {
+  const row0 = run.samples[idx(t)]; if (!row0 || !row0[near]) return { focus: near, ahead: 0 };
+  let best = null;
+  for (let c = 0; c < row0.length; c++) {
+    if (!row0[c][4] || Math.abs(row0[c][2] - row0[near][2]) > 70) continue;
+    let n = 0, k = 0;
+    for (let i = idx(t); i <= idx(t + win) && i < run.samples.length; i++) {
+      const row = run.samples[i], me = row[c]; if (!me[4]) { n -= 99; break; }
+      n += row.filter(x => x[4] && x[2] > me[2] && x[2] - me[2] < R).length; k++;
+    }
+    const sc = (k ? n / k : 0) - Math.abs(row0[c][2] - row0[near][2]) * 0.002;
+    if (!best || sc > best.sc) best = { focus: c, ahead: +(k ? n / k : 0).toFixed(1), sc };
+  }
+  return { focus: best.focus, ahead: best.ahead };
+}
+// incydenty widoczne w kadrze auta focus: kontakt/uderzenie w ścianę/obrót auta w promieniu R m, w oknie [t0, t1]
+// (czasy do efektów dźwiękowych i wstrząsów — liczone z przebiegu, więc działają dla każdej wersji symulacji)
+function eventsNear(run, focus, t0, t1, R = 70) {
+  const out = [];
+  for (const e of run.ev) {
+    if (e.t < t0 || e.t > t1 || e.k === 'reset') continue;
+    if ((e.k === 'contact' && e.v < 3) || (e.k === 'wall' && e.v < 3)) continue;
+    const row = run.samples[idx(e.t)], me = row && row[focus];
+    if (!me || carsOf(e).every(c => Math.abs(row[c][2] - me[2]) > R)) continue;
+    out.push({ t: +(e.t - DT_S / 2).toFixed(2), k: e.k, v: +(e.v || 0).toFixed(1), g: +Math.min(1, e.k === 'spin' ? 0.35 : 0.25 + (e.v || 0) / 20).toFixed(2) });
+  }
+  return out;
+}
+
 function dedupe(list, gap) {
   const out = [];
   for (const c of list.sort((a, b) => b.score - a.score)) if (!out.some(o => o.seed === c.seed && o.track === c.track && o.diff === c.diff && Math.abs(o.t - c.t) < gap)) out.push(c);
   return out;
 }
 
-module.exports = { runAll, record, wrecks, scrapes, threeWide, sideBySide, overtakes, aligned, cleanNear, DT_S };
+module.exports = { runAll, record, wrecks, scrapes, threeWide, sideBySide, overtakes, aligned, cleanNear, density, chaseFocus, eventsNear, DT_S };
