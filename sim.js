@@ -1078,6 +1078,9 @@
       // cel boczny z marginesem na sąsiadów
       let dT = clamp(this.planD(c.s + 15), -tr.halfW + 1.15, tr.halfW - 1.25);
       if (c.status === 'finished') dT = clamp(this.lineD(c.s), -tr.halfW + 1.2, tr.halfW - 1.3);
+      // owal (poza superspeedwayem): w łuku auto na granicy przyczepności ucieka w górę toru — pas wyżej niż górna linia to jazda po bandzie
+      const lim = tr.kind === 'oval' && tr.id !== 'speedway';
+      if (lim && (tr.inTurn(c.s) || tr.inTurn(c.s + c.u))) dT = Math.min(dT, tr.halfW - 2.4);
       dT = this.sideLimit(dT);
       // w łuku zjazd w dół (zacieśnianie promienia) tylko powoli; na zewnątrz swobodniej
       const turn = tr.inTurn(c.s);
@@ -1086,7 +1089,7 @@
         const r = this.lane == null ? 10 : this.laneRate * (turn ? 0.6 : 1);
         this.dS += clamp(dT - this.dS, -r * dt, r * dt);
       } else {
-        const lrDown = this.laneRate * (turn ? 0.3 : 1), lrUp = this.laneRate * (turn ? 0.7 : 1);
+        const lrDown = this.laneRate * (turn ? 0.3 : 1), lrUp = this.laneRate * (turn ? (lim ? 0.35 : 0.7) : 1);   // w górę w łuku też powoli — wyhamowanie ruchu w bok na granicy przyczepności pcha na bandę
         this.dS += clamp(dT - this.dS, -lrDown * dt, lrUp * dt);
       }
       this.dS = clamp(this.dS, Math.min(this.lo, this.hi), Math.max(this.lo, this.hi));
@@ -1246,9 +1249,9 @@
       const dx = (p.x - c.x) * cp + (p.y - c.y) * sp, dy = -(p.x - c.x) * sp + (p.y - c.y) * cp;
       const kap = 2 * dy / (dx * dx + dy * dy);
       const rDes = u * kap;
-      // człon całkujący błąd boczny — kompensuje podsterowność w długim łuku
-      const eLat = this.lane != null ? c.d - this.dS : 0;
-      this.iLat = clamp((this.iLat || 0) * (this.lane != null ? 1 : 1 - dt) + eLat * dt, -2, 2);
+      // człon całkujący błąd boczny — kompensuje podsterowność w długim łuku (na owalu także na linii: bez niego auto jedzie łuk ~1 m wyżej)
+      const hold = this.lane != null || (tr.kind === 'oval' && tr.id !== 'speedway'), eLat = hold ? c.d - this.dS : 0;
+      this.iLat = clamp((this.iLat || 0) * (hold ? 1 : 1 - dt) + eLat * dt, -2, 2);
       let dl = Math.atan(CAR.wb * kap) + 0.09 * (rDes - c.r) + 0.0025 * eLat + 0.004 * this.iLat;
       // kontra przy uślizgu tyłu (lepszy kierowca szybciej i dokładniej)
       const over = c.r - rDes;
@@ -1297,6 +1300,11 @@
       } else if (push > 0.25 && tr.inTurn(c.s) && this.hiCar && this.hi - c.d < 1.5) {
         th *= clamp(1 - (push - 0.25) * (1.5 + 3 * k), 0, 1);
       }
+      // owal: podsterowne auto sunie w łuku na bandę (z prędkością w bok vd) — odpuść gaz, zanim dotknie ściany (bez tego jedzie po bandzie z gazem w podłodze)
+      if (tr.kind === 'oval' && tr.id !== 'speedway' && tr.inTurn(c.s) && Math.abs(c.slipF) > Math.abs(c.slipR)) {
+        const f = tr.frame(c.s), vd = c.vx * f.nx + c.vy * f.ny, room = tr.wallOut(c.s) - c.d - Math.max(0, vd) * 0.8;
+        th *= clamp((room - 1.05) / 0.6, 0, 1);
+      }
       if (this.mistake > 0) { th *= 0.25; }
       c.cmd.throttle = th; c.cmd.brake = br;
     }
@@ -1320,8 +1328,13 @@
     // prędkość, z której zdążę wyhamować przed każdym łukiem pasa d
     // mnożnik prędkości w łuku: zużycie opon, uszkodzenia, brudne powietrze — dobry kierowca to czuje i odpuszcza
     gripScale() {
-      const c = this.car, grip = Math.min(c.fx.gripF, c.fx.gripR);
-      const aeroLoss = (0.25 + 0.2 * this.k) * Math.max(c.dirty, c.aeroLoose);
+      const c = this.car, tr = this.race.track, grip = Math.min(c.fx.gripF, c.fx.gripR);
+      let aeroLoss = (0.25 + 0.2 * this.k) * Math.max(c.dirty, c.aeroLoose);
+      // owal: na prostej brudne powietrze działa w 40%, aero-loose w 30% — przed łukiem licz już z pełnym, inaczej kierowca hamuje dopiero w łuku i wypycha go na bandę
+      if (tr.kind === 'oval' && tr.id !== 'speedway') {
+        const ant = !tr.inTurn(c.s) && tr.inTurn(c.s + c.u * 2);
+        aeroLoss = 0.6 * Math.max(ant ? Math.min(0.38, c.dirty / 0.4) : c.dirty, ant ? Math.min(0.32, c.aeroLoose / 0.3) : c.aeroLoose);
+      }
       return Math.sqrt(grip * (0.7 + 0.3 * c.fx.df)) * (1 - aeroLoss);
     }
     horizonV(d) {
@@ -1361,6 +1374,8 @@
         const vIn = tr.ds(P.inS, P.wallA) / 4.5;
         if (toIn > -5 && vIn < 60) vb = Math.min(vb, Math.sqrt(vIn * vIn + 2 * 6 * Math.max(0, toIn)));
         vt = Math.min(this.horizonV(clamp(this.dS, -tr.halfW, tr.halfW)), this.horizonV(clamp(dT, -tr.halfW, tr.halfW)), vb);
+        // owal: aleja zaczyna się jeszcze w łuku, a pobocze i aleja są płaskie — zejście z przechyłki tylko z prędkością płaskiego łuku
+        if (tr.kind === 'oval') for (let x = 0; x <= 160; x += 8) { const s = c.s + x; if (inRange(tr, s, P.inS, P.outS) && tr.inTurn(s)) vt = Math.min(vt, Math.sqrt((cornerSpeed(tr, tr.kappa(s, sd * P.edge), 0) * this.use * this.gripScale()) ** 2 + 2 * this.decel * 0.7 * x)); }
         // nie zdążył przejechać przed murkiem alei — objazd i próba na następnym okrążeniu
         if (inRange(tr, c.s, P.wallA, P.wallB) && c.d * sd < P.wallD) { c.pit = null; c.pitReq = true; this.reset(); return this.update(0); }
         // zatrzymanie tylko na stanowisku (w pasie stanowisk), nigdy w pasie jazdy
