@@ -260,11 +260,20 @@
       for (let i = 0; i < n; i++) { let m = 0; for (let j = -w; j <= w; j += 2) m = Math.max(m, Ka[mod(i + j, n)]); kmax[i] = m; }
       const raw = [new Float32Array(n), new Float32Array(n)];
       for (let side = 0; side < 2; side++) {
-        const sg = side ? 1 : -1, R = raw[side];
+        const sg = side ? 1 : -1, R = raw[side], Lb = new Float32Array(n);
         for (let i = 0; i < n; i++) {
-          let lim = e + this.runoff;
           const bk = this.B[i] * sg;                        // > 0: ta strona jest zewnętrzną stroną przechylonego łuku
-          if (bk > 0) lim = lerp(lim, this.halfW + 0.3, clamp(bk / (6 * DEG), 0, 1));
+          Lb[i] = bk > 0 ? lerp(e + this.runoff, this.halfW + 0.3, clamp(bk / (6 * DEG), 0, 1)) : e + this.runoff;
+        }
+        // Przechyłka narasta już ~60 m przed łukiem, więc bez tego banda przy krawędzi przechylonego łuku wchodziła klinem (~40°)
+        // w wyjście z poprzedzającego ciasnego zakrętu (Daytona przed bankingiem). Zbieg z bandą za poboczem najwyżej 1:4 —
+        // banda tylko odsuwa się dalej od toru, więc nie zbliża się do innych fragmentów (i tak sprawdza to conflict niżej).
+        for (let pass = 0; pass < 2; pass++) for (let k = 0; k < 2 * n; k++) {
+          const i = pass ? mod(-k, n) : k % n, j = pass ? (i + 1) % n : mod(i - 1, n);
+          Lb[i] = Math.max(Lb[i], Lb[j] - 0.25 * h);
+        }
+        for (let i = 0; i < n; i++) {
+          let lim = Math.min(e + this.runoff, Lb[i]);
           if (this.K[i] * sg < 0 || kmax[i] > 1 / 60) lim = Math.min(lim, 0.8 / Math.max(kmax[i], 1e-4));
           if (sg === P.side && inRange(this, i * h, P.inS - 30, P.outS + 30)) lim = Math.max(lim, P.outer + 1.6);
           lim = Math.max(lim, this.halfW + 1.2);
@@ -783,19 +792,29 @@
       for (const [lx, ly] of [[hl, hw], [hl, -hw], [-hl, -hw], [-hl, hw]]) {
         const px = c.x + lx * cp - ly * sp, py = c.y + lx * sp + ly * cp;
         const L = tr.toLocal(px, py, c.s);
-        let pen = L.d - tr.wallOut(L.s), sgn = -1;
+        let pen = L.d - tr.wallOut(L.s), sgn = -1, wall = true;
         if (pen <= 0) { pen = tr.wallIn(L.s) - L.d; sgn = 1; }
         // murek oddzielający pit lane od toru
         const P = tr.pit;
         if (pen <= 0 && inRange(tr, L.s, P.wallA, P.wallB)) {
           const w = P.side * P.wallD, cs = c.d > w ? 1 : -1;
-          if ((L.d - w) * cs < 0) { pen = Math.abs(L.d - w); sgn = cs; }
+          if ((L.d - w) * cs < 0) { pen = Math.abs(L.d - w); sgn = cs; wall = false; }
         }
-        if (pen > 0 && (!best || pen > best.pen)) best = { pen, px, py, s: L.s, sgn, lx, ly };
+        if (pen > 0 && (!best || pen > best.pen)) best = { pen, px, py, s: L.s, sgn, lx, ly, wall };
       }
       if (!best) return;
       const f = tr.frame(best.s);
-      const vn = contact(c, best.px, best.py, f.nx * best.sgn, f.ny * best.sgn, best.pen, 0.25, 0.32);
+      let nx = f.nx * best.sgn, ny = f.ny * best.sgn, pen = best.pen;
+      // Banda ukośna do osi toru (tor drogowy: lej przed ciasnym łukiem, do ~45°): odbicie od prawdziwej powierzchni bandy,
+      // nie w poprzek toru — inaczej auto jadące prosto na skośną ścianę tylko przesuwa się w bok bez żadnego uderzenia.
+      if (best.wall) {
+        const wf = best.sgn < 0 ? x => tr.wallOut(x) : x => tr.wallIn(x), w = wf(best.s), sl = wf(best.s + 0.5) - wf(best.s - 0.5);
+        if (sl !== 0) {
+          const a = Math.max(0.2, 1 + tr.kappa(best.s, 0) * w), tx = Math.cos(f.th), ty = Math.sin(f.th), m = Math.hypot(a, sl);
+          nx = best.sgn * (f.nx * a - tx * sl) / m; ny = best.sgn * (f.ny * a - ty * sl) / m; pen *= a / m;
+        }
+      }
+      const vn = contact(c, best.px, best.py, nx, ny, pen, 0.25, 0.32);
       if (vn > 0) {
         c.scrape = Math.max(c.scrape, clamp(c.speed / 60, 0.2, 1));
         c.r *= 0.985;
