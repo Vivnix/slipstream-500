@@ -1097,6 +1097,8 @@
     sideLimit(dT) {
       const c = this.car, tr = this.race.track;
       let lo = tr.kind === 'road' ? -tr.halfW + 1.1 : -tr.halfW - 2, hi = tr.halfW - 1.1; this.hiCar = false;
+      // pociąg (superspeedway, krótki owal): auto zbliżające się bokiem potrzebuje zapasu na wyhamowanie ruchu w poprzek
+      const pack = packTrack(tr), myVd = pack ? latV(tr, c) : 0, lo0 = lo, hi0 = hi;
       for (const o of this.race.cars) {
         if (o === c || o.status === 'out') continue;
         const ds = tr.ds(c.s, o.s), dd = o.d - c.d;
@@ -1105,8 +1107,12 @@
         if (!overlap && Math.abs(dd) < 1.5) continue;
         const ahead = (o.speed - c.speed) * 0.6;          // przewidywanie
         if (ds > CAR.length + 1.2 + Math.max(0, -ahead) || ds < -CAR.length - 1.2 - Math.max(0, ahead)) continue;
-        if (o.d > c.d) { hi = Math.min(hi, o.d - this.sep); this.hiCar = true; } else lo = Math.max(lo, o.d + this.sep);
+        // zapas dodatkowy nie wciska auta w bandę ani w pobocze — ścisk robi tylko zwykły margines
+        const ext = pack ? 0.25 + 0.35 * Math.max(0, (myVd - latV(tr, o)) * Math.sign(dd)) : 0;
+        if (o.d > c.d) { hi = Math.min(hi, o.d - this.sep, Math.max(o.d - this.sep - ext, -tr.halfW + 1.2)); this.hiCar = true; } else lo = Math.max(lo, o.d + this.sep, Math.min(o.d + this.sep + ext, hi0 - 1));
       }
+      // auto z dołu dociska mnie do bandy — odpuść i schowaj się za nim, zamiast trzeć o ścianę
+      this.wallSq = pack && lo > hi0 - 0.3;
       if (lo > hi) { const m = (lo + hi) / 2; this.lo = this.hi = m; return m; }
       this.lo = lo; this.hi = hi;
       return clamp(dT, lo, hi);
@@ -1271,9 +1277,11 @@
       if (c.status === 'finished') vt = Math.min(vt, 0.72 * this.vlim(c.s));
       // podążanie za autem z przodu
       const a = this.ahead;
+      let fol = null, fol2 = null;
       if (a && a.status !== 'out' && this.mode !== 'pass') {
         const gap = tr.ds(c.s, a.s) - CAR.length;
         if (Math.abs(a.d - c.d) < 2.2 && gap < 45) {
+          fol = a;
           const turnish = tr.inTurn(c.s) || tr.inTurn(c.s + 40);
           const want = tr.id === 'speedway' ? (turnish ? lerp(8, 2.2, k) : lerp(6, 0.3, k)) : tr.id === 'intermediate' ? lerp(8, 2.5, k) : (turnish ? lerp(8, 2.5, k) : lerp(8, 1.2, k));
           // prędkość, z której zdążę wytracić różnicę do auta z przodu na dostępnym dystansie
@@ -1283,9 +1291,10 @@
         }
       }
       if (this.mode === 'pass' && this.passCar && Math.abs(this.passCar.d - c.d) < 2.0) {
-        const gap = tr.ds(c.s, this.passCar.s) - CAR.length;
+        const gap = tr.ds(c.s, this.passCar.s) - CAR.length; fol2 = this.passCar;
         if (gap > -2 && gap < 12) { const room = gap - lerp(3, 0.5, k); vt = Math.min(vt, this.passCar.speed + (room > 0 ? Math.sqrt(2 * 4 * room) : room * 1.5)); }
       }
+      if (packTrack(tr)) vt = Math.min(vt, this.pathV(fol, fol2));
       let [th, br] = this.pedals(vt);
       // auto wypycha na zewnątrz ponad zamierzoną linię (push) — odpuść gaz, zwłaszcza gdy ktoś jedzie wyżej
       const push = c.d - this.dS;
@@ -1297,8 +1306,35 @@
       } else if (push > 0.25 && tr.inTurn(c.s) && this.hiCar && this.hi - c.d < 1.5) {
         th *= clamp(1 - (push - 0.25) * (1.5 + 3 * k), 0, 1);
       }
+      // pociąg: wynosi mnie pod bandę (nad bandą nie ma dokąd uciec) — odpuść jak przy aucie powyżej; dociśnięty z dołu — schowaj się
+      if (packTrack(tr) && push > 0.25 && tr.inTurn(c.s) && c.d > tr.halfW - 2) th *= clamp(1 - (push - 0.25) * (1.5 + 3 * k), 0, 1);
+      if (this.wallSq) th *= 0.5;
       if (this.mistake > 0) { th *= 0.25; }
       c.cmd.throttle = th; c.cmd.brake = br;
+    }
+
+    // Pociąg na owalu: nie wjedź w żadne auto na swojej drodze — także to, które nie jest „autem z przodu” w docelowym pasie
+    // (atak w innym pasie, rywal zjeżdżający przed maskę, wrak, auto hamujące do alei). Liczy się tor ruchu obu aut za ~0,5 s.
+    pathV(fol, fol2) {
+      const c = this.car, race = this.race, tr = race.track, k = this.k, T = 0.5, myVd = latV(tr, c);
+      let vt = 999;
+      for (const o of race.cars) {
+        if (o === c || o.status === 'out') continue;
+        const ds = tr.ds(c.s, o.s);
+        if (ds <= 0 || ds > 70) continue;
+        // auto zjeżdżające do alei jedzie w dół do swojego celu i zaraz mocno zwolni; za autem, za którym jadę w tunelu, liczy się tylko jego hamowanie
+        const pitIn = o.pit && o.pit.ph === 'in' && o.driver;
+        if ((o === fol || o === fol2) && !pitIn && o.axf > -2) continue;
+        const dd = o.d - c.d, ddT = (pitIn ? o.driver.lane ?? o.driver.dS : o.d + latV(tr, o) * T) - c.d - myVd * T;
+        if (Math.min(Math.abs(dd), Math.abs(ddT)) > 2.15 && dd * ddT > 0) continue;
+        // hamujące auto z przodu (zjazd do alei, kraksa) — jego prędkość za chwilę, nie teraz
+        const vo = Math.max(0, o.speed + Math.min(pitIn ? -5 : 0, o.axf) * 0.6), room = ds - CAR.length - 1;
+        let v = vo + (room > 0 ? Math.sqrt(2 * (3 + 2.5 * k) * room) : room * 1.5);
+        // kolizja tylko w przewidywaniu ruchu bocznego (auto jeszcze nie jest przed maską): odpuść gaz, bez hamowania w łuku — resztę robi sideLimit
+        if (Math.abs(dd) > 2.15 && !pitIn) v = Math.max(v, c.u - 1.5);
+        vt = Math.min(vt, v);
+      }
+      return vt;
     }
 
     // prędkość docelowa → gaz / hamulec
@@ -1396,6 +1432,8 @@
       // auto nie nadąża w bok (na granicy przyczepności) — odpuść, zamiast jechać prosto w murek alei
       const lift = (dT - c.d) * lead > 0 && Math.abs(lead) > 2.2 && c.u > 8;
       if (!side && !((dT - this.dS) * lead > 0 && Math.abs(lead) > 3)) this.dS += clamp(dT - this.dS, -rate * dt, rate * dt);
+      // pociąg (AI): przed wjazdem do alei zjazd w dół tylko w wolne miejsce — auto obok ogranicza cel jak w jeździe w ruchu
+      if (p.ph === 'in' && !onRoad && !c.isPlayer && packTrack(tr)) { this.sideLimit(dT); this.dS = clamp(this.dS, Math.min(this.lo, this.hi), Math.max(this.lo, this.hi)); }
       this.steer(dt);
       [c.cmd.throttle, c.cmd.brake] = this.pedals(vt);
       if (lift) c.cmd.throttle = 0;
@@ -1425,6 +1463,10 @@
     const fx = Math.sqrt(Math.max(0, (c.capR * util) ** 2 - c.fyR * c.fyR));
     return clamp(fx / (CAR.brakeMu * (c.capF + c.capR) * (1 - CAR.brakeFront)), 0.12, 1);
   }
+  // tory jazdy w pociągu (superspeedway, krótki owal) — tu AI pilnuje toru ruchu sąsiadów w poprzek i wzdłuż
+  function packTrack(tr) { return tr.id === 'speedway' || tr.id === 'short'; }
+  // prędkość boczna auta względem osi toru (dodatnia = w górę toru / w lewo)
+  function latV(tr, c) { const f = tr.frame(c.s); return c.vx * f.nx + c.vy * f.ny; }
   function angDiff(a, b) { let d = a - b; while (d > PI) d -= 2 * PI; while (d < -PI) d += 2 * PI; return d; }
 
   return { TRACKS, ROSTER, Track, PathTrack, makeTrack, Race, Car, Driver, CAR, SUB, cornerSpeed, PEAK_SLIP, clamp, lerp, mod, angDiff, shuffle };
